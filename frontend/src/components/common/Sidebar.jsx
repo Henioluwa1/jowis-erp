@@ -13,7 +13,8 @@ import {
   Bell,
   GraduationCap,
   CalendarCheck,
-  Award
+  Award,
+  User
 } from 'lucide-react';
 
 export const Sidebar = () => {
@@ -33,6 +34,7 @@ export const Sidebar = () => {
 
   const internNavItems = [
     { label: 'Intern Dashboard', path: '/intern/dashboard', icon: LayoutDashboard },
+    { label: 'My Track & Placement', path: '/intern/profile', icon: User },
     { label: 'My Attendance', path: '/intern/attendance', icon: CalendarCheck },
     { label: 'My Tasks & Submissions', path: '/intern/tasks', icon: CheckSquare },
     { label: 'My Performance', path: '/intern/performance', icon: Award },
