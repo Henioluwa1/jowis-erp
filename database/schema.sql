@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS `tracks`;
 CREATE TABLE `tracks` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(100) NOT NULL,
+  `code` VARCHAR(50) NOT NULL UNIQUE,
   `slug` VARCHAR(100) NOT NULL UNIQUE,
   `description` TEXT NULL,
   `duration_weeks` INT UNSIGNED NOT NULL DEFAULT 24,
@@ -68,11 +69,13 @@ DROP TABLE IF EXISTS `cohorts`;
 CREATE TABLE `cohorts` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(100) NOT NULL,
+  `cohort_code` VARCHAR(50) NOT NULL UNIQUE,
   `track_id` INT UNSIGNED NOT NULL,
   `lead_mentor_id` INT UNSIGNED NULL,
   `start_date` DATE NOT NULL,
   `end_date` DATE NOT NULL,
   `capacity` INT UNSIGNED NOT NULL DEFAULT 30,
+  `description` TEXT NULL,
   `status` ENUM('upcoming', 'active', 'completed', 'archived') NOT NULL DEFAULT 'active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -113,6 +116,41 @@ CREATE TABLE `intern_profiles` (
   INDEX `idx_intern_status` (`status`),
   INDEX `idx_intern_track` (`track_id`),
   INDEX `idx_intern_cohort` (`cohort_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6B. INTERN ASSIGNMENT HISTORY
+DROP TABLE IF EXISTS `intern_assignment_history`;
+CREATE TABLE `intern_assignment_history` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `intern_id` INT UNSIGNED NOT NULL,
+  `assignment_type` ENUM('track', 'cohort', 'mentor') NOT NULL,
+  `previous_id` INT UNSIGNED NULL,
+  `new_id` INT UNSIGNED NOT NULL,
+  `previous_name` VARCHAR(150) NULL,
+  `new_name` VARCHAR(150) NOT NULL,
+  `reason` VARCHAR(255) NOT NULL,
+  `changed_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_iah_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_iah_changer` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX `idx_iah_intern` (`intern_id`),
+  INDEX `idx_iah_type` (`assignment_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6C. INTERN LIFECYCLE HISTORY
+DROP TABLE IF EXISTS `intern_lifecycle_history`;
+CREATE TABLE `intern_lifecycle_history` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `intern_id` INT UNSIGNED NOT NULL,
+  `previous_status` VARCHAR(50) NULL,
+  `new_status` VARCHAR(50) NOT NULL,
+  `reason` VARCHAR(255) NOT NULL,
+  `changed_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_ilh_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ilh_changer` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX `idx_ilh_intern` (`intern_id`),
+  INDEX `idx_ilh_status` (`new_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 7. APPLICATIONS (Intake pipeline)
