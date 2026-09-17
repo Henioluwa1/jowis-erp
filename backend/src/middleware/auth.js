@@ -1,0 +1,110 @@
+import jwt from 'jsonwebtoken';
+import { query } from '../config/db.js';
+
+export const JWT_SECRET = process.env.JWT_SECRET || 'jowis_studio_erp_jwt_secret_key_2026_super_secure';
+
+/**
+ * Verify JWT Token and attach user + role to req.user
+ */
+export const authenticateJWT = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. No Bearer token provided.'
+      });
+    }
+
+    const token = authHeader.split(' ')[1];
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired session token. Please log in again.'
+      });
+    }
+
+    // Fetch fresh user details from database
+    const users = await query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active,
+              r.name as role_name, r.id as role_id,
+              ip.id as intern_profile_id, ip.intern_code, ip.track_id as intern_track_id, ip.cohort_id as intern_cohort_id,
+              m.id as mentor_id
+       FROM users u
+       JOIN roles r ON u.role_id = r.id
+       LEFT JOIN intern_profiles ip ON u.id = ip.user_id
+       LEFT JOIN mentors m ON u.id = m.user_id
+       WHERE u.id = ?`,
+      [decoded.userId]
+    );
+
+    if (users.length === 0 || !users[0].is_active) {
+      return res.status(401).json({
+        success: false,
+        message: 'User account not found or has been deactivated.'
+      });
+    }
+
+    const user = users[0];
+    req.user = {
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      role: user.role_name,
+      roleId: user.role_id,
+      internProfileId: user.intern_profile_id,
+      internCode: user.intern_code,
+      trackId: user.intern_track_id,
+      cohortId: user.intern_cohort_id,
+      mentorId: user.mentor_id
+    };
+
+    next();
+  } catch (error) {
+    console.error('Auth Middleware Error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error during authentication.' });
+  }
+};
+
+/**
+ * Authorize specified roles (e.g. 'super_admin', 'admin', 'mentor')
+ */
+export const authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Access restricted to [${allowedRoles.join(', ')}]. Your role is ${req.user.role}.`
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Verify that an intern only accesses their own intern record
+ */
+export const verifyInternOwnership = (req, res, next) => {
+  if (req.user.role === 'super_admin' || req.user.role === 'admin' || req.user.role === 'mentor') {
+    return next();
+  }
+
+  const requestedId = parseInt(req.params.internId || req.params.id, 10);
+  if (req.user.role === 'intern' && req.user.internProfileId !== requestedId) {
+    return res.status(403).json({
+      success: false,
+      message: "Forbidden: You are not authorized to view or access another intern's records."
+    });
+  }
+
+  next();
+};
