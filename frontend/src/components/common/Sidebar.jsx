@@ -14,7 +14,9 @@ import {
   GraduationCap,
   CalendarCheck,
   Award,
-  User
+  User,
+  FileCheck,
+  FileText
 } from 'lucide-react';
 
 export const Sidebar = () => {
@@ -29,6 +31,8 @@ export const Sidebar = () => {
     { label: 'Tasks & Assignments', path: '/admin/tasks', icon: CheckSquare },
     { label: 'Performance Analytics', path: '/admin/performance', icon: BarChart3 },
     { label: 'Reports & Intelligence', path: '/admin/reports', icon: FileSpreadsheet },
+    { label: 'Documents & Verification', path: '/admin/documents', icon: FileCheck },
+    { label: 'Certificates & Credentials', path: '/admin/certificates', icon: Award },
     { label: 'System Settings', path: '/admin/settings', icon: Settings }
   ];
 
@@ -39,6 +43,8 @@ export const Sidebar = () => {
     { label: 'My Tasks & Submissions', path: '/intern/tasks', icon: CheckSquare },
     { label: 'My Performance', path: '/intern/performance', icon: Award },
     { label: 'Career Scorecard', path: '/intern/reports', icon: FileSpreadsheet },
+    { label: 'Institutional Documents', path: '/intern/documents', icon: FileText },
+    { label: 'My Certificates', path: '/intern/certificates', icon: Award },
     { label: 'Announcements', path: '/intern/announcements', icon: Bell }
   ];
 

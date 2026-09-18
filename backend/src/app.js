@@ -15,6 +15,8 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import communicationRoutes from './routes/communicationRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import systemRoutes from './routes/systemRoutes.js';
+import documentRoutes from './routes/documentRoutes.js';
+import certificateRoutes from './routes/certificateRoutes.js';
 
 const app = express();
 
@@ -35,7 +37,7 @@ app.use(cors({
     return callback(null, true); // Permissive in local development
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -73,6 +75,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/communications', communicationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/certificates', certificateRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {

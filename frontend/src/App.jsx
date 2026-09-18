@@ -13,6 +13,8 @@ import { TrainingPage } from './pages/admin/TrainingPage';
 import { TasksAdminPage } from './pages/admin/TasksAdminPage';
 import { PerformancePage } from './pages/admin/PerformancePage';
 import { ReportsPage } from './pages/admin/ReportsPage';
+import { DocumentsPage } from './pages/admin/DocumentsPage';
+import { CertificatesPage } from './pages/admin/CertificatesPage';
 import { SystemSettingsPage } from './pages/admin/SystemSettingsPage';
 
 // Intern Pages
@@ -21,14 +23,23 @@ import { InternAttendancePage } from './pages/intern/InternAttendancePage';
 import { InternTasksPage } from './pages/intern/InternTasksPage';
 import { InternPerformancePage } from './pages/intern/InternPerformancePage';
 import { InternReportsPage } from './pages/intern/InternReportsPage';
+import { InternDocumentsPage } from './pages/intern/InternDocumentsPage';
+import { InternCertificatesPage } from './pages/intern/InternCertificatesPage';
 import { AnnouncementsPage } from './pages/intern/AnnouncementsPage';
 import { MyProfilePage } from './pages/intern/MyProfilePage';
+
+// Public Pages
+import { CertificateVerificationPage } from './pages/public/CertificateVerificationPage';
 
 export default function App() {
   const { isAuthenticated, role } = useAuth();
 
   return (
     <Routes>
+      {/* Public Certificate Verification (Zero Auth Required) */}
+      <Route path="/verify/certificate/:verificationCode" element={<CertificateVerificationPage />} />
+      <Route path="/verify/certificate" element={<CertificateVerificationPage />} />
+
       {/* Public Login Route */}
       <Route
         path="/login"
@@ -76,6 +87,8 @@ export default function App() {
         <Route path="/admin/tasks" element={<TasksAdminPage />} />
         <Route path="/admin/performance" element={<PerformancePage />} />
         <Route path="/admin/reports" element={<ReportsPage />} />
+        <Route path="/admin/documents" element={<DocumentsPage />} />
+        <Route path="/admin/certificates" element={<CertificatesPage />} />
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
       </Route>
 
@@ -93,6 +106,8 @@ export default function App() {
         <Route path="/intern/tasks" element={<InternTasksPage />} />
         <Route path="/intern/performance" element={<InternPerformancePage />} />
         <Route path="/intern/reports" element={<InternReportsPage />} />
+        <Route path="/intern/documents" element={<InternDocumentsPage />} />
+        <Route path="/intern/certificates" element={<InternCertificatesPage />} />
         <Route path="/intern/announcements" element={<AnnouncementsPage />} />
       </Route>
 

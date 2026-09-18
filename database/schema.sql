@@ -475,37 +475,133 @@ CREATE TABLE `curriculum_progress` (
   CONSTRAINT `uk_curr_module` UNIQUE (`intern_id`, `module_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 14. DOCUMENTS
-DROP TABLE IF EXISTS `documents`;
-CREATE TABLE `documents` (
+-- 14A. DOCUMENT TYPES
+DROP TABLE IF EXISTS `document_types`;
+CREATE TABLE `document_types` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  `intern_id` INT UNSIGNED NOT NULL,
-  `uploaded_by` INT UNSIGNED NOT NULL,
-  `category` ENUM('id_proof', 'cv', 'agreement', 'recommendation', 'project', 'other') NOT NULL DEFAULT 'other',
-  `title` VARCHAR(150) NOT NULL,
-  `file_path` VARCHAR(255) NOT NULL,
-  `file_size` INT UNSIGNED NOT NULL DEFAULT 0,
-  `mime_type` VARCHAR(100) NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `code` VARCHAR(50) NOT NULL UNIQUE,
+  `description` TEXT NULL,
+  `category` ENUM('identification', 'academic', 'agreement', 'assessment', 'completion', 'other') NOT NULL DEFAULT 'other',
+  `is_required` BOOLEAN NOT NULL DEFAULT 0,
+  `allowed_file_types` VARCHAR(255) NOT NULL DEFAULT 'pdf,jpg,jpeg,png',
+  `max_file_size` INT UNSIGNED NOT NULL DEFAULT 10485760,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `created_by` INT UNSIGNED NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT `fk_doc_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_doc_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_doctype_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  INDEX `idx_doctype_status` (`status`),
+  INDEX `idx_doctype_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 15. CERTIFICATES
+-- 14B. INTERN DOCUMENTS
+DROP TABLE IF EXISTS `intern_documents`;
+CREATE TABLE `intern_documents` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `intern_id` INT UNSIGNED NOT NULL,
+  `document_type_id` INT UNSIGNED NOT NULL,
+  `title` VARCHAR(150) NOT NULL,
+  `original_filename` VARCHAR(255) NOT NULL,
+  `stored_filename` VARCHAR(255) NOT NULL,
+  `file_path` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(100) NOT NULL,
+  `file_size` INT UNSIGNED NOT NULL DEFAULT 0,
+  `current_version` INT UNSIGNED NOT NULL DEFAULT 1,
+  `status` ENUM('uploaded', 'pending_verification', 'verified', 'rejected', 'expired') NOT NULL DEFAULT 'pending_verification',
+  `uploaded_by` INT UNSIGNED NOT NULL,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `verified_by` INT UNSIGNED NULL,
+  `verified_at` DATETIME NULL,
+  `rejection_reason` TEXT NULL,
+  `expiry_date` DATE NULL,
+  `notes` TEXT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_idoc_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_idoc_type` FOREIGN KEY (`document_type_id`) REFERENCES `document_types` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_idoc_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_idoc_verifier` FOREIGN KEY (`verified_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_idoc_intern` (`intern_id`),
+  INDEX `idx_idoc_type` (`document_type_id`),
+  INDEX `idx_idoc_status` (`status`),
+  INDEX `idx_idoc_expiry` (`expiry_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 14C. DOCUMENT VERSIONS
+DROP TABLE IF EXISTS `document_versions`;
+CREATE TABLE `document_versions` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `document_id` INT UNSIGNED NOT NULL,
+  `version_number` INT UNSIGNED NOT NULL,
+  `original_filename` VARCHAR(255) NOT NULL,
+  `stored_filename` VARCHAR(255) NOT NULL,
+  `file_path` VARCHAR(255) NOT NULL,
+  `mime_type` VARCHAR(100) NOT NULL,
+  `file_size` INT UNSIGNED NOT NULL,
+  `uploaded_by` INT UNSIGNED NOT NULL,
+  `uploaded_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `status` ENUM('uploaded', 'pending_verification', 'verified', 'rejected', 'expired') NOT NULL DEFAULT 'pending_verification',
+  `verified_by` INT UNSIGNED NULL,
+  `verified_at` DATETIME NULL,
+  `rejection_reason` TEXT NULL,
+  `notes` TEXT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_dver_doc` FOREIGN KEY (`document_id`) REFERENCES `intern_documents` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_dver_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_dver_verifier` FOREIGN KEY (`verified_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_dver_doc` (`document_id`, `version_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15A. CERTIFICATE TYPES
+DROP TABLE IF EXISTS `certificate_types`;
+CREATE TABLE `certificate_types` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL,
+  `code` VARCHAR(50) NOT NULL UNIQUE,
+  `description` TEXT NULL,
+  `template_layout` VARCHAR(50) NOT NULL DEFAULT 'standard',
+  `signatory_name` VARCHAR(100) NOT NULL DEFAULT 'Executive Director',
+  `signatory_title` VARCHAR(100) NOT NULL DEFAULT 'Lead Director, Jowis Studio',
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `created_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_certtype_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  INDEX `idx_certtype_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 15B. CERTIFICATES
 DROP TABLE IF EXISTS `certificates`;
 CREATE TABLE `certificates` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  `certificate_code` VARCHAR(80) NOT NULL UNIQUE,
   `intern_id` INT UNSIGNED NOT NULL,
+  `certificate_type_id` INT UNSIGNED NULL,
+  `certificate_number` VARCHAR(100) NOT NULL UNIQUE,
+  `verification_code` VARCHAR(64) NOT NULL UNIQUE,
+  `issue_date` DATE NOT NULL,
+  `completion_date` DATE NOT NULL,
   `track_id` INT UNSIGNED NOT NULL,
   `cohort_id` INT UNSIGNED NOT NULL,
-  `issue_date` DATE NOT NULL,
   `signatory_name` VARCHAR(100) NOT NULL DEFAULT 'Executive Director',
   `signatory_title` VARCHAR(100) NOT NULL DEFAULT 'Lead Director, Jowis Studio',
+  `status` ENUM('issued', 'revoked', 'reissued') NOT NULL DEFAULT 'issued',
+  `revocation_reason` TEXT NULL,
+  `revoked_by` INT UNSIGNED NULL,
+  `revoked_at` DATETIME NULL,
+  `issued_by` INT UNSIGNED NULL,
+  `pdf_path` VARCHAR(255) NULL,
+  `metadata` JSON NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `fk_cert_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_cert_type` FOREIGN KEY (`certificate_type_id`) REFERENCES `certificate_types` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_cert_track` FOREIGN KEY (`track_id`) REFERENCES `tracks` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT `fk_cert_cohort` FOREIGN KEY (`cohort_id`) REFERENCES `cohorts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT `fk_cert_cohort` FOREIGN KEY (`cohort_id`) REFERENCES `cohorts` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_cert_revoker` FOREIGN KEY (`revoked_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_cert_issuer` FOREIGN KEY (`issued_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_cert_status` (`status`),
+  INDEX `idx_cert_vcode` (`verification_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 16. ANNOUNCEMENTS
