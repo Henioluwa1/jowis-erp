@@ -351,27 +351,113 @@ CREATE TABLE `task_reviews` (
   INDEX `idx_tr_reviewer` (`reviewer_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 12. PERFORMANCE EVALUATIONS (Multi-Factor Scoring)
+-- 12. PERFORMANCE MANAGEMENT & EVALUATION ENGINE (Phase 4)
+DROP TABLE IF EXISTS `evaluation_scores`;
 DROP TABLE IF EXISTS `performance_evaluations`;
+DROP TABLE IF EXISTS `performance_rating_bands`;
+DROP TABLE IF EXISTS `performance_criteria`;
+DROP TABLE IF EXISTS `performance_periods`;
+
+CREATE TABLE `performance_periods` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT NULL,
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `status` ENUM('draft', 'active', 'closed', 'archived') NOT NULL DEFAULT 'draft',
+  `created_by` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_pp_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  INDEX `idx_pp_status` (`status`),
+  INDEX `idx_pp_dates` (`start_date`, `end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `performance_criteria` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT NULL,
+  `category` ENUM('technical', 'delivery', 'behavioral', 'leadership', 'communication', 'general') NOT NULL DEFAULT 'technical',
+  `weight` DECIMAL(5, 2) NOT NULL DEFAULT 10.00,
+  `max_score` DECIMAL(5, 2) NOT NULL DEFAULT 100.00,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `order_index` INT UNSIGNED NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_pc_status` (`status`),
+  INDEX `idx_pc_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `performance_rating_bands` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(50) NOT NULL,
+  `min_score` DECIMAL(5, 2) NOT NULL,
+  `max_score` DECIMAL(5, 2) NOT NULL,
+  `color` VARCHAR(20) NOT NULL DEFAULT 'emerald',
+  `description` TEXT NULL,
+  `order_index` INT UNSIGNED NOT NULL DEFAULT 1,
+  `status` ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX `idx_prb_scores` (`min_score`, `max_score`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE `performance_evaluations` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `intern_id` INT UNSIGNED NOT NULL,
-  `evaluator_id` INT UNSIGNED NOT NULL,
-  `evaluation_period` VARCHAR(30) NOT NULL COMMENT 'e.g. 2026-Month-09 or Mid-Term',
-  `technical_skills` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `task_completion` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `problem_solving` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `communication` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `teamwork` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `professionalism` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `learning_progress` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `attendance_rating` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1 to 5',
-  `overall_score` DECIMAL(5, 2) NOT NULL COMMENT 'Calculated percentage 0-100',
-  `summary_feedback` TEXT NULL,
+  `period_id` INT UNSIGNED NULL,
+  `reviewer_id` INT UNSIGNED NOT NULL,
+  `cohort_id` INT UNSIGNED NULL,
+  `track_id` INT UNSIGNED NULL,
+  `evaluator_id` INT UNSIGNED NULL COMMENT 'Legacy compatibility alias for reviewer_id',
+  `evaluation_period` VARCHAR(50) NULL COMMENT 'Descriptive cycle tag e.g. Q3-2026',
+  `status` ENUM('draft', 'submitted', 'reviewed', 'finalized') NOT NULL DEFAULT 'draft',
+  `overall_score` DECIMAL(5, 2) NULL COMMENT 'Server-calculated weighted percentage 0-100',
+  `overall_rating` VARCHAR(50) NULL COMMENT 'Band descriptor e.g. Exceeds Expectations',
+  `strengths` TEXT NULL,
+  `areas_for_improvement` TEXT NULL,
+  `reviewer_comments` TEXT NULL,
+  `intern_comments` TEXT NULL,
+  `summary_feedback` TEXT NULL COMMENT 'Legacy compatibility feedback mirror',
+  `submitted_at` DATETIME NULL,
+  `reviewed_at` DATETIME NULL,
+  `finalized_at` DATETIME NULL,
+  `finalized_by` INT UNSIGNED NULL,
+  `is_locked` TINYINT(1) NOT NULL DEFAULT 0,
+  `amendment_reason` TEXT NULL,
+  `amended_by` INT UNSIGNED NULL,
+  `amended_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT `fk_eval_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_eval_evaluator` FOREIGN KEY (`evaluator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_pe_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_period` FOREIGN KEY (`period_id`) REFERENCES `performance_periods` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_cohort` FOREIGN KEY (`cohort_id`) REFERENCES `cohorts` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_track` FOREIGN KEY (`track_id`) REFERENCES `tracks` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_finalized_by` FOREIGN KEY (`finalized_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_pe_amended_by` FOREIGN KEY (`amended_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  UNIQUE KEY `uk_pe_intern_period` (`intern_id`, `period_id`),
+  INDEX `idx_pe_status` (`status`),
+  INDEX `idx_pe_reviewer` (`reviewer_id`),
+  INDEX `idx_pe_period` (`period_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `evaluation_scores` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `evaluation_id` INT UNSIGNED NOT NULL,
+  `criterion_id` INT UNSIGNED NOT NULL,
+  `score` DECIMAL(5, 2) NOT NULL,
+  `max_score` DECIMAL(5, 2) NOT NULL DEFAULT 100.00,
+  `weight` DECIMAL(5, 2) NOT NULL DEFAULT 10.00,
+  `weighted_score` DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+  `comments` TEXT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_es_eval` FOREIGN KEY (`evaluation_id`) REFERENCES `performance_evaluations` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_es_criterion` FOREIGN KEY (`criterion_id`) REFERENCES `performance_criteria` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  UNIQUE KEY `uk_eval_criterion` (`evaluation_id`, `criterion_id`),
+  INDEX `idx_es_eval` (`evaluation_id`),
+  INDEX `idx_es_criterion` (`criterion_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 13. CURRICULUM PROGRESS

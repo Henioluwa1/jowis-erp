@@ -8,8 +8,10 @@
     "start": "node server.js",
     "test": "node tests/attendance.test.js",
     "test:phase3": "node tests/phase3.test.js",
-    "test:all": "node tests/attendance.test.js && node tests/api.test.js && node tests/hardening.test.js && node tests/phase2.test.js && node tests/phase3.test.js",
+    "test:phase4": "node tests/phase4.test.js",
+    "test:all": "node tests/attendance.test.js && node tests/api.test.js && node tests/hardening.test.js && node tests/phase2.test.js && node tests/phase3.test.js && node tests/phase4.test.js",
     "migrate:phase3": "node src/scripts/migrate_phase3.js",
+    "migrate:phase4": "node src/scripts/migrate_phase4.js",
     "init-db": "node ../database/init_db.js"
   },
   "dependencies": {
