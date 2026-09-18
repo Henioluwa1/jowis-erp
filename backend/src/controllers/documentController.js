@@ -3,6 +3,7 @@ import { recordAuditLog } from '../middleware/audit.js';
 import { documentStorageDir } from '../utils/documentUpload.js';
 import path from 'path';
 import fs from 'fs';
+import { createNotification } from '../services/notificationService.js';
 
 // ============================================================================
 // GATE 3: DOCUMENT TYPE MANAGEMENT
@@ -374,6 +375,26 @@ export const verifyOrRejectDocument = async (req, res) => {
 
     const action = status === 'verified' ? 'VERIFY_DOCUMENT' : 'REJECT_DOCUMENT';
     await recordAuditLog(req.user.id, action, 'intern_documents', id, { previousStatus: doc.status }, { newStatus: status, rejectionReason }, req);
+
+    // Cross-Module Notification Trigger (Gate 11)
+    try {
+      const internProfiles = await query('SELECT user_id FROM intern_profiles WHERE id = ?', [doc.intern_id]);
+      if (internProfiles.length > 0) {
+        await createNotification({
+          userId: internProfiles[0].user_id,
+          type: 'document',
+          title: status === 'verified' ? `Document Verified: ${doc.title}` : `Document Rejected: ${doc.title}`,
+          message: status === 'verified'
+            ? `Your document "${doc.title}" has been reviewed and verified.`
+            : `Your document "${doc.title}" was rejected: ${rejectionReason.trim()}`,
+          relatedEntityType: 'document',
+          relatedEntityId: Number(id),
+          link: '/intern/documents'
+        });
+      }
+    } catch (notifErr) {
+      console.error('Document verification notification error:', notifErr.message);
+    }
 
     res.json({
       success: true,

@@ -1,5 +1,6 @@
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
+import { createNotification } from '../services/notificationService.js';
 
 // ============================================================================
 // GATE 3: PERFORMANCE PERIOD MANAGEMENT
@@ -1275,6 +1276,24 @@ export const finalizeEvaluation = async (req, res) => {
       { status: 'finalized', overallScore: finalOverallScore, overallRating: finalRating, isLocked: 1 },
       req
     );
+
+    // Cross-Module Notification Trigger (Gate 11)
+    try {
+      const internProfiles = await query('SELECT user_id FROM intern_profiles WHERE id = ?', [ev.intern_id]);
+      if (internProfiles.length > 0) {
+        await createNotification({
+          userId: internProfiles[0].user_id,
+          type: 'evaluation',
+          title: 'Performance Evaluation Finalized',
+          message: `Your evaluation has been finalized: ${finalOverallScore}% (${finalRating}).`,
+          relatedEntityType: 'evaluation',
+          relatedEntityId: evalId,
+          link: '/intern/performance'
+        });
+      }
+    } catch (notifErr) {
+      console.error('Evaluation finalization notification error:', notifErr.message);
+    }
 
     res.json({
       success: true,

@@ -5,6 +5,7 @@ import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
 import { certificateStorageDir } from '../utils/documentUpload.js';
 import { generateCertificatePDF } from '../utils/certificateGenerator.js';
+import { createNotification } from '../services/notificationService.js';
 
 /**
  * Helper to get intern profile ID for a given user ID
@@ -522,6 +523,24 @@ export const issueCertificate = async (req, res) => {
       req
     );
 
+    // Cross-Module Notification Trigger (Gate 11)
+    try {
+      const internUsers = await query('SELECT user_id FROM intern_profiles WHERE id = ?', [intern_id]);
+      if (internUsers.length > 0) {
+        await createNotification({
+          userId: internUsers[0].user_id,
+          type: 'certificate',
+          title: 'Official Certificate Issued',
+          message: `Congratulations! Your certificate "${certificateNumber}" has been officially issued.`,
+          relatedEntityType: 'certificate',
+          relatedEntityId: newCertId,
+          link: '/intern/certificates'
+        });
+      }
+    } catch (notifErr) {
+      console.error('Certificate issuance notification error:', notifErr.message);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Certificate issued successfully.',
@@ -587,6 +606,24 @@ export const revokeCertificate = async (req, res) => {
       { status: 'revoked', revocationReason: revocationReason.trim() },
       req
     );
+
+    // Cross-Module Notification Trigger (Gate 11)
+    try {
+      const internUsers = await query('SELECT user_id FROM intern_profiles WHERE id = ?', [cert.intern_id]);
+      if (internUsers.length > 0) {
+        await createNotification({
+          userId: internUsers[0].user_id,
+          type: 'certificate',
+          title: 'Certificate Revoked',
+          message: `Your certificate "${cert.certificate_number}" was revoked: ${revocationReason.trim()}`,
+          relatedEntityType: 'certificate',
+          relatedEntityId: Number(id),
+          link: '/intern/certificates'
+        });
+      }
+    } catch (notifErr) {
+      console.error('Certificate revocation notification error:', notifErr.message);
+    }
 
     res.json({
       success: true,

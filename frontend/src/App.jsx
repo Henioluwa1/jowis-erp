@@ -15,6 +15,7 @@ import { PerformancePage } from './pages/admin/PerformancePage';
 import { ReportsPage } from './pages/admin/ReportsPage';
 import { DocumentsPage } from './pages/admin/DocumentsPage';
 import { CertificatesPage } from './pages/admin/CertificatesPage';
+import { CommunicationsPage } from './pages/admin/CommunicationsPage';
 import { SystemSettingsPage } from './pages/admin/SystemSettingsPage';
 
 // Intern Pages
@@ -27,6 +28,9 @@ import { InternDocumentsPage } from './pages/intern/InternDocumentsPage';
 import { InternCertificatesPage } from './pages/intern/InternCertificatesPage';
 import { AnnouncementsPage } from './pages/intern/AnnouncementsPage';
 import { MyProfilePage } from './pages/intern/MyProfilePage';
+
+// Common / Shared Pages
+import { NotificationInboxPage } from './pages/common/NotificationInboxPage';
 
 // Public Pages
 import { CertificateVerificationPage } from './pages/public/CertificateVerificationPage';
@@ -89,6 +93,8 @@ export default function App() {
         <Route path="/admin/reports" element={<ReportsPage />} />
         <Route path="/admin/documents" element={<DocumentsPage />} />
         <Route path="/admin/certificates" element={<CertificatesPage />} />
+        <Route path="/admin/communications" element={<CommunicationsPage />} />
+        <Route path="/admin/notifications" element={<NotificationInboxPage />} />
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
       </Route>
 
@@ -109,7 +115,22 @@ export default function App() {
         <Route path="/intern/documents" element={<InternDocumentsPage />} />
         <Route path="/intern/certificates" element={<InternCertificatesPage />} />
         <Route path="/intern/announcements" element={<AnnouncementsPage />} />
+        <Route path="/intern/notifications" element={<NotificationInboxPage />} />
       </Route>
+
+      {/* Generic Notifications Redirect based on role */}
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'admin', 'mentor', 'intern']}>
+            {role === 'intern' ? (
+              <Navigate to="/intern/notifications" replace />
+            ) : (
+              <Navigate to="/admin/notifications" replace />
+            )}
+          </ProtectedRoute>
+        }
+      />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

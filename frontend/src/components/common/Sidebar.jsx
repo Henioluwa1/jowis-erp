@@ -16,7 +16,8 @@ import {
   Award,
   User,
   FileCheck,
-  FileText
+  FileText,
+  Megaphone
 } from 'lucide-react';
 
 export const Sidebar = () => {
@@ -33,6 +34,8 @@ export const Sidebar = () => {
     { label: 'Reports & Intelligence', path: '/admin/reports', icon: FileSpreadsheet },
     { label: 'Documents & Verification', path: '/admin/documents', icon: FileCheck },
     { label: 'Certificates & Credentials', path: '/admin/certificates', icon: Award },
+    { label: 'Communications & Notices', path: '/admin/communications', icon: Megaphone },
+    { label: 'Notification Center', path: '/admin/notifications', icon: Bell },
     { label: 'System Settings', path: '/admin/settings', icon: Settings }
   ];
 
@@ -45,7 +48,8 @@ export const Sidebar = () => {
     { label: 'Career Scorecard', path: '/intern/reports', icon: FileSpreadsheet },
     { label: 'Institutional Documents', path: '/intern/documents', icon: FileText },
     { label: 'My Certificates', path: '/intern/certificates', icon: Award },
-    { label: 'Announcements', path: '/intern/announcements', icon: Bell }
+    { label: 'Announcements', path: '/intern/announcements', icon: Megaphone },
+    { label: 'Notification Center', path: '/intern/notifications', icon: Bell }
   ];
 
   const navItems = isAdminOrMentor ? adminNavItems : internNavItems;

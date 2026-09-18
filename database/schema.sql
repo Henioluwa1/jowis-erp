@@ -605,33 +605,74 @@ CREATE TABLE `certificates` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 16. ANNOUNCEMENTS
+DROP TABLE IF EXISTS `announcement_acknowledgements`;
 DROP TABLE IF EXISTS `announcements`;
 CREATE TABLE `announcements` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `title` VARCHAR(200) NOT NULL,
   `content` TEXT NOT NULL,
   `author_id` INT UNSIGNED NOT NULL,
-  `target_type` ENUM('all', 'track', 'cohort', 'mentors') NOT NULL DEFAULT 'all',
-  `target_id` INT UNSIGNED NULL COMMENT 'Track ID or Cohort ID if applicable',
+  `target_type` ENUM('all', 'interns', 'mentors', 'admins', 'track', 'cohort', 'intern') NOT NULL DEFAULT 'all',
+  `target_id` INT UNSIGNED NULL COMMENT 'Track ID, Cohort ID, or Intern ID if applicable',
+  `status` ENUM('draft', 'scheduled', 'published', 'expired', 'archived') NOT NULL DEFAULT 'draft',
+  `priority` ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
   `is_pinned` TINYINT(1) NOT NULL DEFAULT 0,
+  `requires_acknowledgement` TINYINT(1) NOT NULL DEFAULT 0,
+  `published_at` DATETIME NULL,
+  `scheduled_at` DATETIME NULL,
+  `expires_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT `fk_ann_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_ann_author` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX `idx_ann_status_pub` (`status`, `published_at`),
+  INDEX `idx_ann_target` (`target_type`, `target_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 16A. ANNOUNCEMENT ACKNOWLEDGEMENTS
+CREATE TABLE `announcement_acknowledgements` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `announcement_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
+  `acknowledged_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_ack_ann` FOREIGN KEY (`announcement_id`) REFERENCES `announcements` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ack_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY `uk_ann_user` (`announcement_id`, `user_id`),
+  INDEX `idx_ack_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 17. NOTIFICATIONS
+DROP TABLE IF EXISTS `notification_preferences`;
 DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `user_id` INT UNSIGNED NOT NULL,
-  `type` ENUM('attendance', 'task', 'evaluation', 'announcement', 'system') NOT NULL,
-  `title` VARCHAR(150) NOT NULL,
-  `message` VARCHAR(255) NOT NULL,
-  `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+  `type` ENUM('attendance', 'task', 'evaluation', 'announcement', 'system', 'document', 'certificate') NOT NULL DEFAULT 'system',
+  `title` VARCHAR(200) NOT NULL,
+  `message` TEXT NOT NULL,
+  `related_entity_type` VARCHAR(50) NULL,
+  `related_entity_id` INT UNSIGNED NULL,
   `link` VARCHAR(255) NULL,
+  `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+  `read_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_notif_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  INDEX `idx_notif_user` (`user_id`, `is_read`)
+  INDEX `idx_notif_user_read` (`user_id`, `is_read`),
+  INDEX `idx_notif_user_created` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 17A. NOTIFICATION PREFERENCES
+CREATE TABLE `notification_preferences` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT UNSIGNED NOT NULL UNIQUE,
+  `announcements_in_app` TINYINT(1) NOT NULL DEFAULT 1,
+  `tasks_in_app` TINYINT(1) NOT NULL DEFAULT 1,
+  `performance_in_app` TINYINT(1) NOT NULL DEFAULT 1,
+  `documents_in_app` TINYINT(1) NOT NULL DEFAULT 1,
+  `system_in_app` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Mandatory system notifications cannot be disabled',
+  `email_notifications` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_notif_pref_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 18. SYSTEM SETTINGS

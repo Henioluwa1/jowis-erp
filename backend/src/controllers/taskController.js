@@ -1,5 +1,6 @@
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
+import { createNotification } from '../services/notificationService.js';
 
 // ============================================================================
 // GATE 3: TASK DEFINITION & CATALOG MANAGEMENT
@@ -462,6 +463,23 @@ export const assignTask = async (req, res) => {
 
       const assignmentId = result.insertId;
       await recordAuditLog(req.user.id, 'ASSIGN_TASK_INTERN', 'task_assignments', assignmentId, null, { taskId, internId, dueDate: targetDueDate }, req);
+
+      // Cross-Module Notification Trigger (Gate 11)
+      try {
+        if (intern.user_id) {
+          await createNotification({
+            userId: intern.user_id,
+            type: 'task',
+            title: `Task Assigned: ${task.title}`,
+            message: `A new task "${task.title}" has been assigned to you. Due date: ${targetDueDate || 'No deadline'}.`,
+            relatedEntityType: 'task',
+            relatedEntityId: taskId,
+            link: '/intern/tasks'
+          });
+        }
+      } catch (notifErr) {
+        console.error('Task assignment notification error:', notifErr.message);
+      }
 
       return res.status(201).json({
         success: true,
@@ -1050,6 +1068,26 @@ export const reviewSubmission = async (req, res) => {
       { outcome, score: numericScore, subStatus, assignStatus },
       req
     );
+
+    // Cross-Module Notification Trigger (Gate 11)
+    try {
+      const internProfiles = await query('SELECT user_id FROM intern_profiles WHERE id = ?', [submission.intern_id]);
+      if (internProfiles.length > 0) {
+        await createNotification({
+          userId: internProfiles[0].user_id,
+          type: 'task',
+          title: outcome === 'completed' ? `Task Graded: ${numericScore} pts` : 'Task Returned for Revision',
+          message: outcome === 'completed'
+            ? `Your submission has been reviewed and approved (${numericScore}/${submission.max_score} pts).`
+            : `Your deliverable was returned with feedback: ${feedback ? feedback.trim().slice(0, 100) : 'Please check revision notes.'}`,
+          relatedEntityType: 'task',
+          relatedEntityId: submission.task_id,
+          link: '/intern/tasks'
+        });
+      }
+    } catch (notifErr) {
+      console.error('Task review notification error:', notifErr.message);
+    }
 
     res.json({
       success: true,

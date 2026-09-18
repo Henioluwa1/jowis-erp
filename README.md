@@ -97,6 +97,32 @@ npm run dev
 ---
 
 ## 5. Security & Ownership Rules
-- Interns can **only view their own attendance, performance, and submissions**.
+- Interns can **only view their own attendance, performance, documents, and submissions**.
 - Interns attempting to fetch other interns' records receive `403 Forbidden`.
-- Interns cannot alter attendance records, grades, or administrative settings.
+- Interns cannot alter attendance records, grades, certificates, or administrative settings.
+- Notification scope is strictly enforced server-side; cross-user notification queries or actions return `403 Forbidden`.
+
+---
+
+## 6. Phase 7: Communication & Notification Engine
+
+Phase 7 introduces an enterprise-grade communications hub, multi-audience announcement broadcaster, acknowledgement tracking system, and real-time notification engine.
+
+### Core Capabilities
+- **Announcement Lifecycle:** `draft`, `scheduled`, `published`, `expired`, and `archived` states with automatic time-based transitions.
+- **Server-Authoritative Audience Targeting:** Broadcasts resolve recipients securely server-side targeting `all`, `interns`, `mentors`, `admins`, specific `track`, specific `cohort`, or individual `intern`. Includes live audience preview.
+- **Urgent Announcement Acknowledgement:** Mandatory acknowledgement tracking (`announcement_acknowledgements`), pending banners for interns, and real-time administrative compliance tracking with percentage progress bars.
+- **In-App Notification Engine:** Real-time unread badges, mark as read/unread/all, dismiss actions, read timestamps (`read_at`), and 1-hour duplicate idempotency protection.
+- **User Notification Preferences:** Granular user controls (`announcement_in_app`, `task_in_app`, `eval_in_app`, etc.) with mandatory system alerts permanently locked ON (`system_in_app = 1`).
+- **Cross-Module Event Triggers:** Automated in-app notifications dispatched for document verification/rejection, certificate issuance/revocation, task assignments/reviews, and performance evaluations.
+
+### Verification & Testing
+```bash
+# Run Phase 7 dedicated suite (73 assertions)
+cd backend
+npm run test:phase7
+
+# Run full project regression suite (481 assertions across all modules)
+npm run test:all
+```
+
