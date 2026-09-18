@@ -264,15 +264,16 @@ export const deleteTrack = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Track not found.' });
     }
 
-    // Check for existing cohorts or interns
+    // Check for existing cohorts, interns, or training modules
     const [cohortCount] = await query('SELECT COUNT(*) as count FROM cohorts WHERE track_id = ?', [trackId]);
     const [internCount] = await query('SELECT COUNT(*) as count FROM intern_profiles WHERE track_id = ?', [trackId]);
+    const [moduleCount] = await query('SELECT COUNT(*) as count FROM training_modules WHERE track_id = ?', [trackId]);
 
-    const totalRefs = (cohortCount?.count || 0) + (internCount?.count || 0);
+    const totalRefs = (cohortCount?.count || 0) + (internCount?.count || 0) + (moduleCount?.count || 0);
     if (totalRefs > 0) {
       return res.status(400).json({
         success: false,
-        message: `Cannot delete track '${existing.name}' because it is referenced by ${cohortCount.count} cohort(s) and ${internCount.count} intern(s). Deactivate the track instead to preserve historical integrity.`
+        message: `Cannot delete track '${existing.name}' because it is referenced by ${cohortCount.count} cohort(s), ${internCount.count} intern(s), and ${moduleCount.count} module(s). Deactivate the track instead to preserve historical integrity.`
       });
     }
 
@@ -622,5 +623,305 @@ export const getMentors = async (req, res) => {
   } catch (error) {
     console.error('getMentors error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve mentors.' });
+  }
+};
+
+
+// ============================================================================
+// TRAINING MODULE MANAGEMENT MODULE (Phase 3 Gate 2)
+// ============================================================================
+
+export const getModules = async (req, res) => {
+  try {
+    const { trackId, status, search } = req.query;
+    let whereConditions = [];
+    let params = [];
+
+    // Role-based scoping
+    if (req.user.role === 'intern') {
+      whereConditions.push('m.track_id = ?');
+      params.push(req.user.trackId || 0);
+      whereConditions.push("m.status = 'active'");
+    } else {
+      if (trackId) {
+        whereConditions.push('m.track_id = ?');
+        params.push(trackId);
+      }
+      if (status) {
+        whereConditions.push('m.status = ?');
+        params.push(status);
+      }
+    }
+
+    if (search && search.trim()) {
+      whereConditions.push('(m.title LIKE ? OR m.module_code LIKE ? OR m.description LIKE ?)');
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    const modules = await query(`
+      SELECT m.*,
+             t.name as track_name, t.code as track_code,
+             COUNT(DISTINCT tk.id) as task_count,
+             COUNT(DISTINCT CASE WHEN tk.status = 'published' THEN tk.id ELSE NULL END) as published_task_count
+      FROM training_modules m
+      JOIN tracks t ON m.track_id = t.id
+      LEFT JOIN tasks tk ON m.id = tk.module_id
+      ${whereClause}
+      GROUP BY m.id
+      ORDER BY m.track_id ASC, m.sequence_order ASC, m.id ASC
+    `, params);
+
+    res.json({ success: true, data: modules });
+  } catch (error) {
+    console.error('getModules error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve training modules.' });
+  }
+};
+
+export const getModuleById = async (req, res) => {
+  try {
+    const moduleId = parseInt(req.params.id, 10);
+    const [module] = await query(`
+      SELECT m.*, t.name as track_name, t.code as track_code
+      FROM training_modules m
+      JOIN tracks t ON m.track_id = t.id
+      WHERE m.id = ?
+    `, [moduleId]);
+
+    if (!module) {
+      return res.status(404).json({ success: false, message: 'Training module not found.' });
+    }
+
+    if (req.user.role === 'intern' && module.track_id !== req.user.trackId) {
+      return res.status(403).json({ success: false, message: 'Forbidden: You can only view modules for your assigned track.' });
+    }
+
+    let taskConditions = ['t.module_id = ?'];
+    let taskParams = [moduleId];
+    if (req.user.role === 'intern') {
+      taskConditions.push("t.status = 'published'");
+    }
+
+    const tasks = await query(`
+      SELECT t.*,
+             u.first_name as author_first, u.last_name as author_last
+      FROM tasks t
+      JOIN users u ON t.assigned_by = u.id
+      WHERE ${taskConditions.join(' AND ')}
+      ORDER BY t.due_date ASC, t.id ASC
+    `, taskParams);
+
+    res.json({
+      success: true,
+      data: {
+        ...module,
+        tasks
+      }
+    });
+  } catch (error) {
+    console.error('getModuleById error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve module details.' });
+  }
+};
+
+export const createModule = async (req, res) => {
+  try {
+    const { trackId, title, description, moduleCode, sequenceOrder, estimatedHours, status } = req.body;
+
+    if (!trackId) {
+      return res.status(400).json({ success: false, message: 'Track ID is required.' });
+    }
+    if (!title || !title.trim()) {
+      return res.status(400).json({ success: false, message: 'Module title is required.' });
+    }
+
+    const [track] = await query('SELECT id, name FROM tracks WHERE id = ?', [trackId]);
+    if (!track) {
+      return res.status(400).json({ success: false, message: 'Invalid track ID: Track does not exist.' });
+    }
+
+    const trimmedCode = (moduleCode || '').trim().toUpperCase();
+    if (!trimmedCode) {
+      return res.status(400).json({ success: false, message: 'Module code is required (e.g. MOD-FSD-01).' });
+    }
+
+    const [existingCode] = await query(
+      'SELECT id FROM training_modules WHERE track_id = ? AND module_code = ?',
+      [trackId, trimmedCode]
+    );
+    if (existingCode) {
+      return res.status(400).json({
+        success: false,
+        message: `A module with code '${trimmedCode}' already exists in this track.`
+      });
+    }
+
+    let order = parseInt(sequenceOrder, 10);
+    if (isNaN(order) || order <= 0) {
+      const [maxOrder] = await query('SELECT MAX(sequence_order) as max_o FROM training_modules WHERE track_id = ?', [trackId]);
+      order = (maxOrder?.max_o || 0) + 1;
+    }
+
+    const hours = parseInt(estimatedHours, 10);
+    const validHours = !isNaN(hours) && hours > 0 ? hours : 10;
+    const finalStatus = ['draft', 'active', 'archived'].includes(status) ? status : 'active';
+
+    const result = await query(`
+      INSERT INTO training_modules (track_id, title, description, module_code, sequence_order, estimated_hours, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [trackId, title.trim(), description ? description.trim() : null, trimmedCode, order, validHours, finalStatus]);
+
+    const moduleId = result.insertId;
+    await recordAuditLog(req.user.id, 'CREATE_TRAINING_MODULE', 'training_modules', moduleId, null, { trackId, title: title.trim(), moduleCode: trimmedCode }, req);
+
+    res.status(201).json({
+      success: true,
+      message: `Training module '${title.trim()}' (${trimmedCode}) created successfully.`,
+      data: { id: moduleId, trackId, title: title.trim(), moduleCode: trimmedCode, sequenceOrder: order, status: finalStatus }
+    });
+  } catch (error) {
+    console.error('createModule error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create training module.' });
+  }
+};
+
+export const updateModule = async (req, res) => {
+  try {
+    const moduleId = parseInt(req.params.id, 10);
+    const { title, description, moduleCode, sequenceOrder, estimatedHours, status, trackId } = req.body;
+
+    const [existing] = await query('SELECT * FROM training_modules WHERE id = ?', [moduleId]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Training module not found.' });
+    }
+
+    const targetTrackId = trackId ? parseInt(trackId, 10) : existing.track_id;
+    if (trackId && trackId !== existing.track_id) {
+      const [tr] = await query('SELECT id FROM tracks WHERE id = ?', [targetTrackId]);
+      if (!tr) {
+        return res.status(400).json({ success: false, message: 'Target track does not exist.' });
+      }
+    }
+
+    const updatedCode = moduleCode ? moduleCode.trim().toUpperCase() : existing.module_code;
+    if (updatedCode !== existing.module_code || targetTrackId !== existing.track_id) {
+      const [duplicate] = await query(
+        'SELECT id FROM training_modules WHERE track_id = ? AND module_code = ? AND id != ?',
+        [targetTrackId, updatedCode, moduleId]
+      );
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `Module code '${updatedCode}' is already taken in this track.` });
+      }
+    }
+
+    const updatedTitle = title !== undefined ? title.trim() : existing.title;
+    const updatedDesc = description !== undefined ? description : existing.description;
+    const updatedOrder = sequenceOrder !== undefined ? parseInt(sequenceOrder, 10) : existing.sequence_order;
+    const updatedHours = estimatedHours !== undefined ? parseInt(estimatedHours, 10) : existing.estimated_hours;
+    const updatedStatus = status !== undefined && ['draft', 'active', 'archived'].includes(status) ? status : existing.status;
+
+    await query(`
+      UPDATE training_modules
+      SET track_id = ?, title = ?, description = ?, module_code = ?, sequence_order = ?, estimated_hours = ?, status = ?
+      WHERE id = ?
+    `, [targetTrackId, updatedTitle, updatedDesc, updatedCode, updatedOrder, updatedHours, updatedStatus, moduleId]);
+
+    await recordAuditLog(req.user.id, 'UPDATE_TRAINING_MODULE', 'training_modules', moduleId, existing, req.body, req);
+
+    res.json({
+      success: true,
+      message: 'Training module updated successfully.',
+      data: { id: moduleId, title: updatedTitle, moduleCode: updatedCode, sequenceOrder: updatedOrder, status: updatedStatus }
+    });
+  } catch (error) {
+    console.error('updateModule error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update training module.' });
+  }
+};
+
+export const toggleModuleStatus = async (req, res) => {
+  try {
+    const moduleId = parseInt(req.params.id, 10);
+    const { status } = req.body;
+
+    const [existing] = await query('SELECT * FROM training_modules WHERE id = ?', [moduleId]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Training module not found.' });
+    }
+
+    let newStatus = status;
+    if (!newStatus) {
+      newStatus = existing.status === 'active' ? 'archived' : 'active';
+    }
+
+    if (!['draft', 'active', 'archived'].includes(newStatus)) {
+      return res.status(400).json({ success: false, message: "Status must be 'draft', 'active', or 'archived'." });
+    }
+
+    await query('UPDATE training_modules SET status = ? WHERE id = ?', [newStatus, moduleId]);
+    await recordAuditLog(req.user.id, 'TOGGLE_MODULE_STATUS', 'training_modules', moduleId, { status: existing.status }, { status: newStatus }, req);
+
+    res.json({
+      success: true,
+      message: `Training module status changed from '${existing.status}' to '${newStatus}'.`,
+      data: { id: moduleId, status: newStatus }
+    });
+  } catch (error) {
+    console.error('toggleModuleStatus error:', error);
+    res.status(500).json({ success: false, message: 'Failed to toggle module status.' });
+  }
+};
+
+export const reorderModules = async (req, res) => {
+  try {
+    const { trackId, moduleOrders } = req.body;
+    if (!trackId || !Array.isArray(moduleOrders)) {
+      return res.status(400).json({ success: false, message: 'trackId and moduleOrders array are required.' });
+    }
+
+    for (const item of moduleOrders) {
+      if (item.id && item.sequenceOrder !== undefined) {
+        await query(
+          'UPDATE training_modules SET sequence_order = ? WHERE id = ? AND track_id = ?',
+          [parseInt(item.sequenceOrder, 10), parseInt(item.id, 10), parseInt(trackId, 10)]
+        );
+      }
+    }
+
+    await recordAuditLog(req.user.id, 'REORDER_TRAINING_MODULES', 'tracks', trackId, null, { moduleOrders }, req);
+
+    res.json({ success: true, message: 'Modules reordered successfully.' });
+  } catch (error) {
+    console.error('reorderModules error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reorder modules.' });
+  }
+};
+
+export const deleteModule = async (req, res) => {
+  try {
+    const moduleId = parseInt(req.params.id, 10);
+    const [existing] = await query('SELECT * FROM training_modules WHERE id = ?', [moduleId]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Training module not found.' });
+    }
+
+    const [taskCount] = await query('SELECT COUNT(*) as count FROM tasks WHERE module_id = ?', [moduleId]);
+    if (taskCount?.count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete module '${existing.title}' because ${taskCount.count} task(s) are assigned to it. Archive the module or reassign its tasks first.`
+      });
+    }
+
+    await query('DELETE FROM training_modules WHERE id = ?', [moduleId]);
+    await recordAuditLog(req.user.id, 'DELETE_TRAINING_MODULE', 'training_modules', moduleId, existing, null, req);
+
+    res.json({ success: true, message: `Training module '${existing.title}' deleted successfully.` });
+  } catch (error) {
+    console.error('deleteModule error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete training module.' });
   }
 };

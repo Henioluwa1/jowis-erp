@@ -230,46 +230,125 @@ CREATE TABLE `company_holidays` (
   INDEX `idx_holiday_date` (`holiday_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 10. TASKS & ASSIGNMENTS
+-- 9C. TRAINING MODULES (Curriculum units within tracks)
+DROP TABLE IF EXISTS `training_modules`;
+CREATE TABLE `training_modules` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `track_id` INT UNSIGNED NOT NULL,
+  `title` VARCHAR(150) NOT NULL,
+  `description` TEXT NULL,
+  `module_code` VARCHAR(50) NOT NULL,
+  `sequence_order` INT UNSIGNED NOT NULL DEFAULT 1,
+  `estimated_hours` INT UNSIGNED NOT NULL DEFAULT 10,
+  `status` ENUM('draft', 'active', 'archived') NOT NULL DEFAULT 'active',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_tm_track` FOREIGN KEY (`track_id`) REFERENCES `tracks` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  UNIQUE KEY `uk_track_module_code` (`track_id`, `module_code`),
+  INDEX `idx_tm_track` (`track_id`),
+  INDEX `idx_tm_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10. TASKS (Technical milestones & assignments)
 DROP TABLE IF EXISTS `tasks`;
 CREATE TABLE `tasks` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `title` VARCHAR(200) NOT NULL,
   `description` TEXT NOT NULL,
+  `instructions` TEXT NULL,
+  `expected_deliverable` VARCHAR(255) NULL,
   `track_id` INT UNSIGNED NOT NULL,
   `cohort_id` INT UNSIGNED NULL,
+  `module_id` INT UNSIGNED NULL,
+  `task_type` ENUM('assignment', 'project', 'quiz', 'practical', 'research', 'coding', 'design', 'presentation', 'other') NOT NULL DEFAULT 'assignment',
+  `difficulty` ENUM('beginner', 'intermediate', 'advanced') NOT NULL DEFAULT 'intermediate',
   `assigned_by` INT UNSIGNED NOT NULL,
   `due_date` DATETIME NOT NULL,
+  `due_days` INT UNSIGNED NULL,
+  `estimated_hours` INT UNSIGNED NOT NULL DEFAULT 8,
   `max_score` INT UNSIGNED NOT NULL DEFAULT 100,
+  `pass_score` INT UNSIGNED NOT NULL DEFAULT 60,
   `priority` ENUM('low', 'medium', 'high', 'urgent') NOT NULL DEFAULT 'medium',
+  `status` ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'published',
   `attachment_url` VARCHAR(255) NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `fk_tasks_track` FOREIGN KEY (`track_id`) REFERENCES `tracks` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_tasks_cohort` FOREIGN KEY (`cohort_id`) REFERENCES `cohorts` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `fk_tasks_author` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_tasks_module` FOREIGN KEY (`module_id`) REFERENCES `training_modules` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_tasks_author` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX `idx_tasks_track` (`track_id`),
+  INDEX `idx_tasks_module` (`module_id`),
+  INDEX `idx_tasks_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10B. TASK ASSIGNMENTS (Task instantiation to intern/cohort)
+DROP TABLE IF EXISTS `task_assignments`;
+CREATE TABLE `task_assignments` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `task_id` INT UNSIGNED NOT NULL,
+  `intern_id` INT UNSIGNED NOT NULL,
+  `cohort_id` INT UNSIGNED NULL,
+  `assigned_by` INT UNSIGNED NOT NULL,
+  `assigned_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `due_date` DATETIME NOT NULL,
+  `status` ENUM('assigned', 'in_progress', 'submitted', 'under_review', 'returned', 'completed', 'overdue', 'cancelled') NOT NULL DEFAULT 'assigned',
+  `notes` TEXT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_ta_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ta_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ta_cohort` FOREIGN KEY (`cohort_id`) REFERENCES `cohorts` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_ta_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  UNIQUE KEY `uk_task_intern_assignment` (`task_id`, `intern_id`),
+  INDEX `idx_ta_status` (`status`),
+  INDEX `idx_ta_intern` (`intern_id`),
+  INDEX `idx_ta_cohort` (`cohort_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 11. TASK SUBMISSIONS
 DROP TABLE IF EXISTS `task_submissions`;
 CREATE TABLE `task_submissions` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `task_assignment_id` INT UNSIGNED NULL,
   `task_id` INT UNSIGNED NOT NULL,
   `intern_id` INT UNSIGNED NOT NULL,
   `submission_text` TEXT NULL,
   `submission_url` VARCHAR(255) NULL,
+  `attachment_path` VARCHAR(255) NULL,
   `submitted_at` DATETIME NOT NULL,
-  `status` ENUM('submitted', 'under_review', 'graded', 'late') NOT NULL DEFAULT 'submitted',
+  `attempt_number` INT UNSIGNED NOT NULL DEFAULT 1,
+  `status` ENUM('submitted', 'under_review', 'returned', 'graded', 'completed') NOT NULL DEFAULT 'submitted',
   `score` DECIMAL(5, 2) NULL,
   `feedback` TEXT NULL,
   `graded_by` INT UNSIGNED NULL,
   `graded_at` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_sub_ta` FOREIGN KEY (`task_assignment_id`) REFERENCES `task_assignments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_sub_task` FOREIGN KEY (`task_id`) REFERENCES `tasks` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_sub_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_sub_grader` FOREIGN KEY (`graded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT `uk_task_intern` UNIQUE (`task_id`, `intern_id`)
+  INDEX `idx_sub_task_intern` (`task_id`, `intern_id`),
+  INDEX `idx_sub_ta` (`task_assignment_id`),
+  INDEX `idx_sub_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 11B. TASK REVIEWS (Audit history of mentor reviews)
+DROP TABLE IF EXISTS `task_reviews`;
+CREATE TABLE `task_reviews` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `submission_id` INT UNSIGNED NOT NULL,
+  `reviewer_id` INT UNSIGNED NOT NULL,
+  `score` DECIMAL(5, 2) NULL,
+  `feedback` TEXT NULL,
+  `status` ENUM('completed', 'returned') NOT NULL DEFAULT 'completed',
+  `reviewed_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_tr_sub` FOREIGN KEY (`submission_id`) REFERENCES `task_submissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_tr_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX `idx_tr_sub` (`submission_id`),
+  INDEX `idx_tr_reviewer` (`reviewer_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 12. PERFORMANCE EVALUATIONS (Multi-Factor Scoring)

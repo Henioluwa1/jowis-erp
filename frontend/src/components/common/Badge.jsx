@@ -7,11 +7,13 @@ export const Badge = ({ status, text, size = 'md' }) => {
 
   if (['PRESENT', 'ACTIVE', 'COMPLETED', 'ACCEPTED', 'GRADED'].includes(normalized)) {
     styles = 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60';
+  } else if (['RETURNED', 'REVISION_REQUESTED'].includes(normalized)) {
+    styles = 'bg-orange-950/80 text-orange-300 border-orange-800/60';
   } else if (['LATE', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'SCREENING', 'ONBOARDING'].includes(normalized)) {
     styles = 'bg-amber-950/80 text-amber-300 border-amber-800/60';
   } else if (['ABSENT', 'DROPPED', 'SUSPENDED', 'OVERDUE', 'REJECTED'].includes(normalized)) {
     styles = 'bg-rose-950/80 text-rose-300 border-rose-800/60';
-  } else if (['EXCUSED', 'UPCOMING', 'APPLIED', 'NEW'].includes(normalized)) {
+  } else if (['EXCUSED', 'UPCOMING', 'APPLIED', 'NEW', 'ASSIGNED'].includes(normalized)) {
     styles = 'bg-sky-950/80 text-sky-300 border-sky-800/60';
   } else if (['ALUMNI', 'ARCHIVED'].includes(normalized)) {
     styles = 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60';

@@ -16,14 +16,16 @@ import {
   AlertCircle,
   CheckCircle2,
   Layers,
-  Clock
+  Clock,
+  Trash2
 } from 'lucide-react';
 
 export const TrainingPage = () => {
-  const [activeTab, setActiveTab] = useState('tracks'); // 'tracks' or 'cohorts'
+  const [activeTab, setActiveTab] = useState('tracks'); // 'tracks', 'cohorts', or 'modules'
   const [tracks, setTracks] = useState([]);
   const [cohorts, setCohorts] = useState([]);
   const [mentors, setMentors] = useState([]);
+  const [modules, setModules] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -32,6 +34,9 @@ export const TrainingPage = () => {
   const [cohortSearch, setCohortSearch] = useState('');
   const [cohortTrackFilter, setCohortTrackFilter] = useState('');
   const [cohortStatusFilter, setCohortStatusFilter] = useState('');
+  const [moduleSearch, setModuleSearch] = useState('');
+  const [moduleTrackFilter, setModuleTrackFilter] = useState('');
+  const [moduleStatusFilter, setModuleStatusFilter] = useState('');
 
   // Track Modals
   const [trackModalOpen, setTrackModalOpen] = useState(false);
@@ -64,6 +69,21 @@ export const TrainingPage = () => {
   const [cohortDetailModal, setCohortDetailModal] = useState(false);
   const [selectedCohortDetail, setSelectedCohortDetail] = useState(null);
 
+  // Module Modals (Gate 2)
+  const [moduleModalOpen, setModuleModalOpen] = useState(false);
+  const [editingModule, setEditingModule] = useState(null);
+  const [moduleForm, setModuleForm] = useState({
+    trackId: '',
+    title: '',
+    moduleCode: '',
+    sequenceOrder: 1,
+    estimatedHours: 10,
+    status: 'active',
+    description: ''
+  });
+  const [moduleDetailModal, setModuleDetailModal] = useState(false);
+  const [selectedModuleDetail, setSelectedModuleDetail] = useState(null);
+
   // Status & Feedback
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -72,18 +92,22 @@ export const TrainingPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [tRes, cRes, mRes] = await Promise.all([
+      const [tRes, cRes, mRes, modRes] = await Promise.all([
         api.get('/training/tracks', {
           params: { search: trackSearch, status: trackStatusFilter }
         }),
         api.get('/training/cohorts', {
           params: { search: cohortSearch, trackId: cohortTrackFilter, status: cohortStatusFilter }
         }),
-        api.get('/training/mentors')
+        api.get('/training/mentors'),
+        api.get('/training/modules', {
+          params: { search: moduleSearch, trackId: moduleTrackFilter, status: moduleStatusFilter }
+        })
       ]);
       if (tRes.data.success) setTracks(tRes.data.data);
       if (cRes.data.success) setCohorts(cRes.data.data);
       if (mRes.data.success) setMentors(mRes.data.data);
+      if (modRes.data.success) setModules(modRes.data.data);
     } catch (err) {
       console.error('Failed to load training data:', err);
     } finally {
@@ -93,7 +117,7 @@ export const TrainingPage = () => {
 
   useEffect(() => {
     fetchData();
-  }, [trackSearch, trackStatusFilter, cohortSearch, cohortTrackFilter, cohortStatusFilter]);
+  }, [trackSearch, trackStatusFilter, cohortSearch, cohortTrackFilter, cohortStatusFilter, moduleSearch, moduleTrackFilter, moduleStatusFilter]);
 
   // Track Actions
   const openCreateTrack = () => {
@@ -262,6 +286,97 @@ export const TrainingPage = () => {
     }
   };
 
+  // Module Actions (Gate 2)
+  const openCreateModule = () => {
+    setEditingModule(null);
+    setModuleForm({
+      trackId: tracks[0]?.id || '',
+      title: '',
+      moduleCode: '',
+      sequenceOrder: (modules.length || 0) + 1,
+      estimatedHours: 20,
+      status: 'active',
+      description: ''
+    });
+    setFormError('');
+    setFormSuccess('');
+    setModuleModalOpen(true);
+  };
+
+  const openEditModule = (mod) => {
+    setEditingModule(mod);
+    setModuleForm({
+      trackId: mod.track_id,
+      title: mod.title,
+      moduleCode: mod.module_code,
+      sequenceOrder: mod.sequence_order,
+      estimatedHours: mod.estimated_hours,
+      status: mod.status,
+      description: mod.description || ''
+    });
+    setFormError('');
+    setFormSuccess('');
+    setModuleModalOpen(true);
+  };
+
+  const handleSaveModule = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormSuccess('');
+    setSubmitting(true);
+    try {
+      if (editingModule) {
+        const res = await api.put(`/training/modules/${editingModule.id}`, moduleForm);
+        if (res.data.success) {
+          setFormSuccess('Module updated successfully.');
+          setTimeout(() => { setModuleModalOpen(false); fetchData(); }, 800);
+        }
+      } else {
+        const res = await api.post('/training/modules', moduleForm);
+        if (res.data.success) {
+          setFormSuccess('Module created successfully.');
+          setTimeout(() => { setModuleModalOpen(false); fetchData(); }, 800);
+        }
+      }
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to save module.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleModule = async (mod) => {
+    const nextStatus = mod.status === 'active' ? 'archived' : 'active';
+    try {
+      const res = await api.patch(`/training/modules/${mod.id}/status`, { status: nextStatus });
+      if (res.data.success) fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to toggle module status.');
+    }
+  };
+
+  const handleDeleteModule = async (mod) => {
+    if (!window.confirm(`Are you sure you want to delete module '${mod.title}'?`)) return;
+    try {
+      const res = await api.delete(`/training/modules/${mod.id}`);
+      if (res.data.success) fetchData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete module.');
+    }
+  };
+
+  const openModuleDetail = async (moduleId) => {
+    try {
+      const res = await api.get(`/training/modules/${moduleId}`);
+      if (res.data.success) {
+        setSelectedModuleDetail(res.data.data);
+        setModuleDetailModal(true);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -269,10 +384,10 @@ export const TrainingPage = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <GraduationCap className="w-6 h-6 text-brand-400" />
-            <span>Tracks & Cohorts Master Management</span>
+            <span>Tracks, Cohorts & Curriculum Management</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Configure enterprise training programs, cohort batches, capacity metrics, and mentor assignments.
+            Configure enterprise training tracks, cohort batches, curriculum modules, and mentor supervision.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -284,13 +399,21 @@ export const TrainingPage = () => {
               <PlusCircle className="w-4 h-4" />
               <span>Create New Track</span>
             </button>
-          ) : (
+          ) : activeTab === 'cohorts' ? (
             <button
               onClick={openCreateCohort}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-brand-600/30 transition-all cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Create New Cohort</span>
+            </button>
+          ) : (
+            <button
+              onClick={openCreateModule}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-brand-600/30 transition-all cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Create New Module</span>
             </button>
           )}
         </div>
@@ -319,6 +442,17 @@ export const TrainingPage = () => {
         >
           <Users className="w-4 h-4" />
           <span>Cohort Batches ({cohorts.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('modules')}
+          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'modules'
+              ? 'border-brand-500 text-brand-400'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Curriculum Modules ({modules.length})</span>
         </button>
       </div>
 
@@ -539,6 +673,156 @@ export const TrainingPage = () => {
                           >
                             Edit
                           </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODULES TAB (GATE 2) */}
+      {activeTab === 'modules' && (
+        <div className="space-y-4">
+          {/* Modules Filter */}
+          <div className="erp-card p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Search Modules</label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Search title, code, description..."
+                    value={moduleSearch}
+                    onChange={(e) => setModuleSearch(e.target.value)}
+                    className="erp-input w-full pl-9"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Filter Track</label>
+                <select
+                  value={moduleTrackFilter}
+                  onChange={(e) => setModuleTrackFilter(e.target.value)}
+                  className="erp-input w-full"
+                >
+                  <option value="">All Tracks</option>
+                  {tracks.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Filter Status</label>
+                <select
+                  value={moduleStatusFilter}
+                  onChange={(e) => setModuleStatusFilter(e.target.value)}
+                  className="erp-input w-full"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="draft">Draft</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Modules Table */}
+          <div className="erp-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="px-5 py-3.5">Code</th>
+                    <th className="px-5 py-3.5">Seq #</th>
+                    <th className="px-5 py-3.5">Module Title & Description</th>
+                    <th className="px-5 py-3.5">Belongs To Track</th>
+                    <th className="px-5 py-3.5">Est. Hours</th>
+                    <th className="px-5 py-3.5">Tasks</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-12 text-slate-400">Loading curriculum modules...</td>
+                    </tr>
+                  ) : modules.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-12 text-slate-500">No training modules found matching criteria.</td>
+                    </tr>
+                  ) : (
+                    modules.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-5 py-3.5 font-mono font-bold text-brand-300">
+                          {m.module_code}
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-300 font-bold">
+                          #{m.sequence_order}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-bold text-white text-sm">{m.title}</div>
+                          <div className="text-slate-400 line-clamp-1 max-w-md mt-0.5">{m.description || 'Core curriculum training unit.'}</div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                            {m.track_code}
+                          </span>
+                          <span className="text-slate-400 text-[11px] block mt-0.5">{m.track_name}</span>
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-300">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-500" />
+                            <span>{m.estimated_hours} hrs</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="px-2 py-0.5 rounded bg-brand-950/80 text-brand-300 font-mono text-[11px] border border-brand-800/60 font-semibold">
+                            {m.published_task_count || 0} / {m.task_count || 0} Tasks
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge status={m.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => openModuleDetail(m.id)}
+                              title="View Module Details & Tasks"
+                              className="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-all cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => openEditModule(m)}
+                              title="Edit Module"
+                              className="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-all cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleModule(m)}
+                              title={m.status === 'active' ? 'Archive Module' : 'Activate Module'}
+                              className={`p-1.5 rounded-md hover:bg-slate-800 transition-all cursor-pointer ${
+                                m.status === 'active' ? 'text-amber-400' : 'text-emerald-400'
+                              }`}
+                            >
+                              <Power className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteModule(m)}
+                              title="Delete Module"
+                              className="p-1.5 rounded-md hover:bg-rose-950/40 text-slate-500 hover:text-rose-400 transition-all cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -884,6 +1168,193 @@ export const TrainingPage = () => {
                             {m.intern_mentor_first ? `${m.intern_mentor_first} ${m.intern_mentor_last}` : 'Cohort Lead'}
                           </td>
                           <td className="px-4 py-2.5"><Badge status={m.status} size="sm" /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODULE MODAL (CREATE / EDIT) */}
+      <Modal
+        isOpen={moduleModalOpen}
+        onClose={() => setModuleModalOpen(false)}
+        title={editingModule ? `Edit Module: ${editingModule.title}` : 'Create New Curriculum Module'}
+        maxWidth="max-w-xl"
+      >
+        <form onSubmit={handleSaveModule} className="space-y-4 text-xs">
+          {formError && (
+            <div className="p-3 bg-rose-950/60 border border-rose-800 rounded-lg text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+          {formSuccess && (
+            <div className="p-3 bg-emerald-950/60 border border-emerald-800 rounded-lg text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              <span>{formSuccess}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block font-semibold text-slate-300 uppercase mb-1">Assigned Track *</label>
+              <select
+                required
+                value={moduleForm.trackId}
+                onChange={(e) => setModuleForm({ ...moduleForm, trackId: e.target.value })}
+                className="erp-input w-full"
+              >
+                <option value="">Select track...</option>
+                {tracks.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-300 uppercase mb-1">Module Code *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. MOD-FSD-07"
+                value={moduleForm.moduleCode}
+                onChange={(e) => setModuleForm({ ...moduleForm, moduleCode: e.target.value.toUpperCase() })}
+                className="erp-input w-full font-mono uppercase"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-300 uppercase mb-1">Module Title *</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Cloud Native Microservices Architecture"
+              value={moduleForm.title}
+              onChange={(e) => setModuleForm({ ...moduleForm, title: e.target.value })}
+              className="erp-input w-full"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-300 uppercase mb-1">Seq. Order *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={moduleForm.sequenceOrder}
+                onChange={(e) => setModuleForm({ ...moduleForm, sequenceOrder: e.target.value })}
+                className="erp-input w-full font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-300 uppercase mb-1">Est. Hours *</label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={moduleForm.estimatedHours}
+                onChange={(e) => setModuleForm({ ...moduleForm, estimatedHours: e.target.value })}
+                className="erp-input w-full font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-300 uppercase mb-1">Status *</label>
+              <select
+                value={moduleForm.status}
+                onChange={(e) => setModuleForm({ ...moduleForm, status: e.target.value })}
+                className="erp-input w-full"
+              >
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-300 uppercase mb-1">Curriculum Description</label>
+            <textarea
+              rows={3}
+              placeholder="Summary of technical concepts, frameworks, and milestones covered..."
+              value={moduleForm.description}
+              onChange={(e) => setModuleForm({ ...moduleForm, description: e.target.value })}
+              className="erp-input w-full"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+            <button
+              type="button"
+              onClick={() => setModuleModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-lg font-semibold shadow-md shadow-brand-600/30"
+            >
+              {submitting ? 'Saving...' : editingModule ? 'Save Changes' : 'Create Module'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* MODULE DETAIL / TASKS MODAL */}
+      {selectedModuleDetail && (
+        <Modal
+          isOpen={moduleDetailModal}
+          onClose={() => setModuleDetailModal(false)}
+          title={`Module: ${selectedModuleDetail.title} (${selectedModuleDetail.module_code})`}
+          maxWidth="max-w-3xl"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 flex justify-between items-center">
+              <div>
+                <p className="text-sm font-bold text-white">{selectedModuleDetail.title}</p>
+                <p className="text-slate-400 mt-0.5">
+                  Track: <strong className="text-slate-200">{selectedModuleDetail.track_name} ({selectedModuleDetail.track_code})</strong> • Est: <strong className="text-slate-200">{selectedModuleDetail.estimated_hours} hrs</strong> • Seq: #{selectedModuleDetail.sequence_order}
+                </p>
+                <p className="text-slate-400 mt-1">{selectedModuleDetail.description || 'No detailed syllabus text provided.'}</p>
+              </div>
+              <Badge status={selectedModuleDetail.status} />
+            </div>
+
+            <div>
+              <h4 className="font-bold text-white mb-2">Associated Technical Tasks ({selectedModuleDetail.tasks?.length || 0})</h4>
+              <div className="overflow-x-auto rounded-lg border border-slate-800">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-900 text-slate-400 uppercase text-[10px] border-b border-slate-800">
+                    <tr>
+                      <th className="px-4 py-2.5">Task Title</th>
+                      <th className="px-4 py-2.5">Type</th>
+                      <th className="px-4 py-2.5">Difficulty</th>
+                      <th className="px-4 py-2.5">Points</th>
+                      <th className="px-4 py-2.5">Deadline</th>
+                      <th className="px-4 py-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/80">
+                    {!selectedModuleDetail.tasks || selectedModuleDetail.tasks.length === 0 ? (
+                      <tr><td colSpan={6} className="py-6 text-center text-slate-500">No tasks currently assigned to this module.</td></tr>
+                    ) : (
+                      selectedModuleDetail.tasks.map((tk) => (
+                        <tr key={tk.id} className="hover:bg-slate-800/30">
+                          <td className="px-4 py-2.5 font-bold text-white">{tk.title}</td>
+                          <td className="px-4 py-2.5 uppercase font-mono text-[10px] text-slate-300">{tk.task_type}</td>
+                          <td className="px-4 py-2.5">
+                            <span className="capitalize text-slate-300">{tk.difficulty}</span>
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-brand-300">{tk.pass_score} / {tk.max_score} pts</td>
+                          <td className="px-4 py-2.5 font-mono text-slate-400">{tk.due_date}</td>
+                          <td className="px-4 py-2.5"><Badge status={tk.status} size="sm" /></td>
                         </tr>
                       ))
                     )}

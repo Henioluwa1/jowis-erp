@@ -11,7 +11,14 @@ import {
   createCohort,
   updateCohort,
   deleteCohort,
-  getMentors
+  getMentors,
+  getModules,
+  getModuleById,
+  createModule,
+  updateModule,
+  toggleModuleStatus,
+  reorderModules,
+  deleteModule
 } from '../controllers/trainingController.js';
 import { authenticateJWT, authorizeRoles } from '../middleware/auth.js';
 
@@ -31,6 +38,15 @@ router.get('/cohorts/:id', authenticateJWT, getCohortById);
 router.post('/cohorts', authenticateJWT, authorizeRoles('super_admin', 'admin'), createCohort);
 router.put('/cohorts/:id', authenticateJWT, authorizeRoles('super_admin', 'admin'), updateCohort);
 router.delete('/cohorts/:id', authenticateJWT, authorizeRoles('super_admin', 'admin'), deleteCohort);
+
+// Modules endpoints (Gate 2)
+router.get('/modules', authenticateJWT, getModules);
+router.get('/modules/:id', authenticateJWT, getModuleById);
+router.post('/modules', authenticateJWT, authorizeRoles('super_admin', 'admin'), createModule);
+router.put('/modules/:id', authenticateJWT, authorizeRoles('super_admin', 'admin'), updateModule);
+router.patch('/modules/:id/status', authenticateJWT, authorizeRoles('super_admin', 'admin'), toggleModuleStatus);
+router.post('/modules/reorder', authenticateJWT, authorizeRoles('super_admin', 'admin'), reorderModules);
+router.delete('/modules/:id', authenticateJWT, authorizeRoles('super_admin', 'admin'), deleteModule);
 
 // Mentors endpoint
 router.get('/mentors', authenticateJWT, getMentors);
