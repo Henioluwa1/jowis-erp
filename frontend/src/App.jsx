@@ -17,6 +17,7 @@ import { DocumentsPage } from './pages/admin/DocumentsPage';
 import { CertificatesPage } from './pages/admin/CertificatesPage';
 import { CommunicationsPage } from './pages/admin/CommunicationsPage';
 import { SystemSettingsPage } from './pages/admin/SystemSettingsPage';
+import { AdministrationHub } from './pages/admin/governance/AdministrationHub';
 
 // Intern Pages
 import { InternDashboard } from './pages/intern/InternDashboard';
@@ -96,6 +97,18 @@ export default function App() {
         <Route path="/admin/communications" element={<CommunicationsPage />} />
         <Route path="/admin/notifications" element={<NotificationInboxPage />} />
         <Route path="/admin/settings" element={<SystemSettingsPage />} />
+        <Route
+          path="/admin/governance"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
+              <AdministrationHub />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/administration"
+          element={<Navigate to="/admin/governance" replace />}
+        />
       </Route>
 
       {/* Intern Protected Portal */}

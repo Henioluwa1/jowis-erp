@@ -17,12 +17,14 @@ import {
   User,
   FileCheck,
   FileText,
-  Megaphone
+  Megaphone,
+  Shield
 } from 'lucide-react';
 
 export const Sidebar = () => {
   const { role } = useAuth();
   const isAdminOrMentor = role === 'super_admin' || role === 'admin' || role === 'mentor';
+  const isSuperOrAdmin = role === 'super_admin' || role === 'admin';
 
   const adminNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
@@ -36,7 +38,10 @@ export const Sidebar = () => {
     { label: 'Certificates & Credentials', path: '/admin/certificates', icon: Award },
     { label: 'Communications & Notices', path: '/admin/communications', icon: Megaphone },
     { label: 'Notification Center', path: '/admin/notifications', icon: Bell },
-    { label: 'System Settings', path: '/admin/settings', icon: Settings }
+    ...(isSuperOrAdmin ? [
+      { label: 'Administration & Governance', path: '/admin/governance', icon: Shield },
+      { label: 'System Settings', path: '/admin/settings', icon: Settings }
+    ] : [])
   ];
 
   const internNavItems = [

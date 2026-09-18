@@ -28,6 +28,7 @@ CREATE TABLE `users` (
   `phone` VARCHAR(30) NULL,
   `avatar_url` VARCHAR(255) NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `deactivation_reason` VARCHAR(255) NULL,
   `last_login` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -672,7 +673,8 @@ CREATE TABLE `notification_preferences` (
   `email_notifications` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT `fk_notif_pref_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_notif_pref_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `chk_pref_system_in_app` CHECK (`system_in_app` = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 18. SYSTEM SETTINGS
@@ -681,12 +683,16 @@ CREATE TABLE `system_settings` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `setting_key` VARCHAR(100) NOT NULL UNIQUE,
   `setting_value` TEXT NOT NULL,
+  `value_type` ENUM('string', 'number', 'boolean', 'json', 'time') NOT NULL DEFAULT 'string',
   `category` VARCHAR(50) NOT NULL DEFAULT 'general',
+  `is_public` TINYINT(1) NOT NULL DEFAULT 0,
   `description` VARCHAR(255) NULL,
-  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  `updated_by` INT UNSIGNED NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 19. AUDIT LOGS
+-- 19. AUDIT LOGS (Immutable governance trail)
 DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (
   `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -696,11 +702,39 @@ CREATE TABLE `audit_logs` (
   `entity_id` INT UNSIGNED NULL,
   `old_value` JSON NULL,
   `new_value` JSON NULL,
+  `reason` VARCHAR(255) NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'SUCCESS',
   `ip_address` VARCHAR(45) NULL,
+  `user_agent` VARCHAR(255) NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   INDEX `idx_audit_action` (`action`),
-  INDEX `idx_audit_entity` (`entity_type`, `entity_id`)
+  INDEX `idx_audit_entity` (`entity_type`, `entity_id`),
+  INDEX `idx_audit_user_created` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 20. PERMISSIONS (Canonical RBAC domain capabilities)
+DROP TABLE IF EXISTS `permissions`;
+CREATE TABLE `permissions` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `module` VARCHAR(50) NOT NULL,
+  `action` VARCHAR(50) NOT NULL,
+  `slug` VARCHAR(100) NOT NULL UNIQUE,
+  `description` VARCHAR(255) NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_perm_module` (`module`),
+  INDEX `idx_perm_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 21. ROLE PERMISSIONS (Junction mapping)
+DROP TABLE IF EXISTS `role_permissions`;
+CREATE TABLE `role_permissions` (
+  `role_id` INT UNSIGNED NOT NULL,
+  `permission_id` INT UNSIGNED NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`role_id`, `permission_id`),
+  CONSTRAINT `fk_rp_role` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_rp_perm` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

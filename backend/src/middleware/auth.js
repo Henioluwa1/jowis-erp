@@ -108,3 +108,41 @@ export const verifyInternOwnership = (req, res, next) => {
 
   next();
 };
+
+/**
+ * Authorize specified permission slug (e.g. 'users:read', 'settings:update') (Gate 4)
+ */
+export const authorizePermission = (permissionSlug) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      // super_admin always bypasses with full institutional authorization
+      if (req.user.role === 'super_admin') {
+        return next();
+      }
+
+      const rows = await query(`
+        SELECT p.id
+        FROM role_permissions rp
+        JOIN permissions p ON rp.permission_id = p.id
+        WHERE rp.role_id = ? AND p.slug = ?
+        LIMIT 1
+      `, [req.user.roleId, permissionSlug]);
+
+      if (rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: `Forbidden: Missing required permission [${permissionSlug}].`
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error('Permission check error:', error);
+      res.status(500).json({ success: false, message: 'Internal server error validating permissions.' });
+    }
+  };
+};

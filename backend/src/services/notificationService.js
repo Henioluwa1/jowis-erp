@@ -41,18 +41,32 @@ async function isNotificationPermitted(userId, type) {
   return rows[0].is_enabled === 1;
 }
 
+import crypto from 'crypto';
+
 /**
- * Save in-app notification with idempotency check
+ * Save in-app notification with event-aware idempotency check (Gate A4)
  */
-async function saveInAppNotification({ userId, type, title, message, relatedEntityType, relatedEntityId, link }) {
-  // Idempotency check: Don't duplicate unread notification for same entity & user within 1 hour
+async function saveInAppNotification({ userId, type, title, message, relatedEntityType, relatedEntityId, link, idempotencyKey }) {
+  const cleanTitle = (title || '').slice(0, 200).trim();
+  const cleanMsg = (message || '').trim();
+  const cleanType = type || 'system';
+
+  // Event signature representing this specific business occurrence
+  const eventHash = idempotencyKey || crypto.createHash('sha256')
+    .update(`${userId}:${cleanType}:${relatedEntityType || ''}:${relatedEntityId || ''}:${cleanTitle}:${cleanMsg}`)
+    .digest('hex');
+
+  // Idempotency check:
+  // Deduplicate exact duplicate events within 1 hour (whether read or unread)
+  // Legitimate repeated events with different messages or actions are permitted
   if (relatedEntityType && relatedEntityId) {
     const existing = await query(
       `SELECT id FROM notifications 
-       WHERE user_id = ? AND type = ? AND related_entity_type = ? AND related_entity_id = ? AND is_read = 0
-       AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+       WHERE user_id = ? AND type = ? AND related_entity_type = ? AND related_entity_id = ?
+         AND title = ? AND message = ?
+         AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
        LIMIT 1`,
-      [userId, type, relatedEntityType, relatedEntityId]
+      [userId, cleanType, relatedEntityType, relatedEntityId, cleanTitle, cleanMsg]
     );
     if (existing.length > 0) {
       return existing[0].id;
@@ -64,9 +78,9 @@ async function saveInAppNotification({ userId, type, title, message, relatedEnti
      VALUES (?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
     [
       userId,
-      type || 'system',
-      title.slice(0, 200),
-      message,
+      cleanType,
+      cleanTitle,
+      cleanMsg,
       relatedEntityType || null,
       relatedEntityId || null,
       link || null
@@ -79,7 +93,7 @@ async function saveInAppNotification({ userId, type, title, message, relatedEnti
 /**
  * Dispatch a single notification
  */
-export async function createNotification({ userId, type, title, message, relatedEntityType, relatedEntityId, link }) {
+export async function createNotification({ userId, type, title, message, relatedEntityType, relatedEntityId, link, idempotencyKey }) {
   try {
     if (!userId || !title || !message) return null;
 
@@ -96,7 +110,8 @@ export async function createNotification({ userId, type, title, message, related
       message,
       relatedEntityType,
       relatedEntityId,
-      link
+      link,
+      idempotencyKey
     });
   } catch (error) {
     console.error('NotificationService.createNotification Error:', error.message);

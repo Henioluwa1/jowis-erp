@@ -108,21 +108,49 @@ npm run dev
 
 Phase 7 introduces an enterprise-grade communications hub, multi-audience announcement broadcaster, acknowledgement tracking system, and real-time notification engine.
 
-### Core Capabilities
+### Core Capabilities & Audit Hardening
 - **Announcement Lifecycle:** `draft`, `scheduled`, `published`, `expired`, and `archived` states with automatic time-based transitions.
-- **Server-Authoritative Audience Targeting:** Broadcasts resolve recipients securely server-side targeting `all`, `interns`, `mentors`, `admins`, specific `track`, specific `cohort`, or individual `intern`. Includes live audience preview.
+- **Server-Authoritative Audience Targeting:** Broadcasts resolve recipients securely server-side targeting `all`, `interns`, `mentors`, `admins`, specific `track`, specific `cohort`, or individual `intern`. Hardened against mentor cross-cohort scope leaks.
+- **Deterministic Idempotency:** Action/event-aware deterministic SHA-256 idempotency hashing (`userId:type:entityType:entityId:title:message`) to eliminate duplicate notification processing while preserving legitimate distinct events.
 - **Urgent Announcement Acknowledgement:** Mandatory acknowledgement tracking (`announcement_acknowledgements`), pending banners for interns, and real-time administrative compliance tracking with percentage progress bars.
-- **In-App Notification Engine:** Real-time unread badges, mark as read/unread/all, dismiss actions, read timestamps (`read_at`), and 1-hour duplicate idempotency protection.
-- **User Notification Preferences:** Granular user controls (`announcement_in_app`, `task_in_app`, `eval_in_app`, etc.) with mandatory system alerts permanently locked ON (`system_in_app = 1`).
+- **In-App Notification Engine:** Real-time unread badges, mark as read/unread/all, dismiss actions, read timestamps (`read_at`).
+- **User Notification Preferences:** Granular user controls (`announcements_in_app`, `tasks_in_app`, `performance_in_app`, etc.) with mandatory system alerts permanently locked ON with database-level CHECK constraint (`system_in_app = 1`).
 - **Cross-Module Event Triggers:** Automated in-app notifications dispatched for document verification/rejection, certificate issuance/revocation, task assignments/reviews, and performance evaluations.
+
+---
+
+## 7. Phase 8: Administration, Audit & System Governance
+
+Phase 8 provides Jowis Studio ERP with an enterprise-grade administrative, governance, and audit layer.
+
+### Core Capabilities
+- **Centralized Governance Hub (`/admin/governance`):** Unified administrative portal with tabbed sections for Governance Overview, User Administration, Roles & Permissions, Organization & System Settings, and Immutable Audit Logs.
+- **User Administration:** Paginated, searchable, and role-filtered user roster. Profile inspection without password hash exposure, secure password resets, and account activation/deactivation requiring mandatory justification reasons.
+- **Privilege Escalation Protection:** Strict server-side RBAC safeguards:
+  - Self-deactivation and self-role modifications are prohibited.
+  - Operational Admins cannot elevate users to `super_admin`.
+  - Non-super admins cannot alter security-critical system settings.
+  - Mentors and Interns are strictly blocked from all administrative endpoints (403 Forbidden).
+- **Canonical Permissions Matrix:** 32 canonical domain capabilities mapped across 14 modules (`users`, `roles`, `system`, `attendance`, `interns`, `training`, `tasks`, `performance`, `reports`, `documents`, `certificates`, `communications`, `settings`, `audit`) with relational junction tables (`permissions`, `role_permissions`).
+- **Organization & System Configuration:** Controlled parameter registry supporting typed values (`string`, `number`, `boolean`, `json`, `time`), format validation, audit recording, and public/private flag enforcement.
+- **Authoritative Africa/Lagos Time & Attendance Rules:** Organization defaults preserved with strict server-side cutoff (`09:00:00 AM`) and working schedule definition.
+- **Immutable Audit Trail:** Append-only audit logs with HTTP 405 Method Not Allowed enforcement for any `PUT` or `DELETE` mutation requests. Captures actor ID, action, entity type, entity ID, before/after JSON diffs, mandatory justification reasons, HTTP status, client IP address, and User-Agent headers.
 
 ### Verification & Testing
 ```bash
-# Run Phase 7 dedicated suite (73 assertions)
+# Run Phase 7 audit test suite (73 assertions)
 cd backend
 npm run test:phase7
 
-# Run full project regression suite (481 assertions across all modules)
-npm run test:all
-```
+# Run Phase 8 dedicated suite (78 assertions)
+cd backend
+npm run test:phase8
 
+# Run full project regression suite (559 assertions across all 10 modules)
+cd backend
+npm run test:all
+
+# Production frontend build
+cd frontend
+npm run build
+```

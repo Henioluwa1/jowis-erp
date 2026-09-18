@@ -279,18 +279,18 @@ async function runHardeningTests() {
       const regData = await registerRes.json();
       assert(regData.success && Array.isArray(regData.data), 'Admin attendance register returns paginated records');
 
-      // Test Close-day attendance
+      // Test Close-day attendance (Use authoritative working date so test passes deterministically 7 days a week)
       const closeRes = await fetch(`${baseUrl}/attendance/admin/close-day`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${adminToken}`
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({ date: '2026-09-18' })
       });
       const closeData = await closeRes.json();
       assert(closeRes.status === 200 && closeData.success, 'Admin close-day attendance executed successfully');
-      console.log(`    ℹ️ Close day result: ${closeData.message}, marked absent count: ${closeData.markedAbsentCount}`);
+      console.log(`    ℹ️ Close day result: ${closeData.message}, marked absent count: ${closeData.data?.recordedAbsences ?? 0}`);
     }
 
     console.log('\n=======================================================');

@@ -394,6 +394,29 @@ export const getAnnouncementById = async (req, res) => {
       }
     }
 
+    if (userRole === 'mentor') {
+      if (announcement.status !== 'published') {
+        return res.status(404).json({ success: false, message: 'Announcement not found or not published.' });
+      }
+      const mentorId = req.user.mentorId || 0;
+      const cohortRows = await query(
+        `SELECT id, track_id FROM cohorts WHERE lead_mentor_id = ?`,
+        [mentorId]
+      );
+      const cohortIds = cohortRows.map(c => c.id);
+      const trackIds = [...new Set(cohortRows.map(c => c.track_id))];
+
+      const isEligible =
+        announcement.target_type === 'all' ||
+        announcement.target_type === 'mentors' ||
+        (announcement.target_type === 'cohort' && cohortIds.includes(announcement.target_id)) ||
+        (announcement.target_type === 'track' && trackIds.includes(announcement.target_id));
+
+      if (!isEligible) {
+        return res.status(403).json({ success: false, message: 'You are not authorized to view this announcement.' });
+      }
+    }
+
     res.json({ success: true, data: announcement });
   } catch (error) {
     console.error('getAnnouncementById error:', error);
