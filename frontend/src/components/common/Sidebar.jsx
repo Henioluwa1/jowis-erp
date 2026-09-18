@@ -28,7 +28,7 @@ export const Sidebar = () => {
     { label: 'Authoritative Attendance', path: '/admin/attendance', icon: Clock },
     { label: 'Tasks & Assignments', path: '/admin/tasks', icon: CheckSquare },
     { label: 'Performance Analytics', path: '/admin/performance', icon: BarChart3 },
-    { label: 'Reports & Export', path: '/admin/reports', icon: FileSpreadsheet },
+    { label: 'Reports & Intelligence', path: '/admin/reports', icon: FileSpreadsheet },
     { label: 'System Settings', path: '/admin/settings', icon: Settings }
   ];
 
@@ -38,6 +38,7 @@ export const Sidebar = () => {
     { label: 'My Attendance', path: '/intern/attendance', icon: CalendarCheck },
     { label: 'My Tasks & Submissions', path: '/intern/tasks', icon: CheckSquare },
     { label: 'My Performance', path: '/intern/performance', icon: Award },
+    { label: 'Career Scorecard', path: '/intern/reports', icon: FileSpreadsheet },
     { label: 'Announcements', path: '/intern/announcements', icon: Bell }
   ];
 

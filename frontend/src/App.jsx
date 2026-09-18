@@ -20,6 +20,7 @@ import { InternDashboard } from './pages/intern/InternDashboard';
 import { InternAttendancePage } from './pages/intern/InternAttendancePage';
 import { InternTasksPage } from './pages/intern/InternTasksPage';
 import { InternPerformancePage } from './pages/intern/InternPerformancePage';
+import { InternReportsPage } from './pages/intern/InternReportsPage';
 import { AnnouncementsPage } from './pages/intern/AnnouncementsPage';
 import { MyProfilePage } from './pages/intern/MyProfilePage';
 
@@ -91,6 +92,7 @@ export default function App() {
         <Route path="/intern/attendance" element={<InternAttendancePage />} />
         <Route path="/intern/tasks" element={<InternTasksPage />} />
         <Route path="/intern/performance" element={<InternPerformancePage />} />
+        <Route path="/intern/reports" element={<InternReportsPage />} />
         <Route path="/intern/announcements" element={<AnnouncementsPage />} />
       </Route>
 
