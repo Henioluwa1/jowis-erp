@@ -18,7 +18,8 @@ import {
   FileCheck,
   FileText,
   Megaphone,
-  Shield
+  Shield,
+  Cpu
 } from 'lucide-react';
 
 export const Sidebar = () => {
@@ -39,6 +40,7 @@ export const Sidebar = () => {
     { label: 'Communications & Notices', path: '/admin/communications', icon: Megaphone },
     { label: 'Notification Center', path: '/admin/notifications', icon: Bell },
     ...(isSuperOrAdmin ? [
+      { label: 'ERP Automation', path: '/admin/automation', icon: Cpu },
       { label: 'Administration & Governance', path: '/admin/governance', icon: Shield },
       { label: 'System Settings', path: '/admin/settings', icon: Settings }
     ] : [])

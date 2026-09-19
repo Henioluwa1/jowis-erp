@@ -737,4 +737,54 @@ CREATE TABLE `role_permissions` (
   CONSTRAINT `fk_rp_perm` FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 22. AUTOMATION RULES (Phase 9 Enterprise Automation Engine)
+DROP TABLE IF EXISTS `automation_rules`;
+CREATE TABLE `automation_rules` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `rule_code` VARCHAR(64) NOT NULL UNIQUE,
+  `name` VARCHAR(150) NOT NULL,
+  `description` TEXT NULL,
+  `category` VARCHAR(50) NOT NULL DEFAULT 'operations',
+  `trigger_type` ENUM('schedule', 'event', 'manual') NOT NULL DEFAULT 'schedule',
+  `schedule_interval` VARCHAR(50) NOT NULL DEFAULT 'daily',
+  `action_type` VARCHAR(100) NOT NULL,
+  `config` JSON NULL,
+  `is_enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `last_run_at` DATETIME NULL,
+  `next_run_at` DATETIME NULL,
+  `created_by` INT UNSIGNED NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_ar_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_ar_code` (`rule_code`),
+  INDEX `idx_ar_category` (`category`),
+  INDEX `idx_ar_enabled` (`is_enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 23. AUTOMATION EXECUTIONS (Audit history and execution records)
+DROP TABLE IF EXISTS `automation_executions`;
+CREATE TABLE `automation_executions` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `rule_id` INT UNSIGNED NOT NULL,
+  `rule_code` VARCHAR(64) NOT NULL,
+  `trigger_type` VARCHAR(30) NOT NULL DEFAULT 'manual',
+  `idempotency_key` VARCHAR(128) NOT NULL,
+  `status` ENUM('pending', 'running', 'completed', 'failed', 'skipped', 'retrying') NOT NULL DEFAULT 'pending',
+  `start_time` DATETIME NOT NULL,
+  `completion_time` DATETIME NULL,
+  `retry_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `max_retries` INT UNSIGNED NOT NULL DEFAULT 3,
+  `affected_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `details` JSON NULL,
+  `error_message` TEXT NULL,
+  `executed_by` INT UNSIGNED NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_ae_rule` FOREIGN KEY (`rule_id`) REFERENCES `automation_rules` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_ae_executor` FOREIGN KEY (`executed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_ae_rule_id` (`rule_id`),
+  INDEX `idx_ae_status` (`status`),
+  INDEX `idx_ae_key` (`idempotency_key`),
+  INDEX `idx_ae_start` (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -136,7 +136,7 @@ Phase 8 provides Jowis Studio ERP with an enterprise-grade administrative, gover
 - **Authoritative Africa/Lagos Time & Attendance Rules:** Organization defaults preserved with strict server-side cutoff (`09:00:00 AM`) and working schedule definition.
 - **Immutable Audit Trail:** Append-only audit logs with HTTP 405 Method Not Allowed enforcement for any `PUT` or `DELETE` mutation requests. Captures actor ID, action, entity type, entity ID, before/after JSON diffs, mandatory justification reasons, HTTP status, client IP address, and User-Agent headers.
 
-### Verification & Testing
+### Verification & Testing (Phase 8)
 ```bash
 # Run Phase 7 audit test suite (73 assertions)
 cd backend
@@ -145,8 +145,60 @@ npm run test:phase7
 # Run Phase 8 dedicated suite (78 assertions)
 cd backend
 npm run test:phase8
+```
 
-# Run full project regression suite (559 assertions across all 10 modules)
+---
+
+## 8. Phase 9: Advanced ERP & Automation
+
+Phase 9 implements an enterprise-grade, deterministic, and auditable **Automation Engine** for Jowis Studio ERP, streamlining daily operations without black-box or non-deterministic automation risks.
+
+### Core Capabilities
+- **Centralized Automation Console (`/admin/automation`):** Dedicated administrative console featuring three integrated tabs:
+  1. **Rules & Triggers:** Active automation rules registry with category filters (`All`, `Attendance`, `Tasks`, `Training`, `Compliance`, `Mentors`), instant execution metrics, manual "Run Now" trigger, and modal-based rule configuration.
+  2. **Execution History:** Paginated log of all historical executions with status filters, latency metrics, items processed/modified counters, detailed JSON inspector, and one-click retry for failed jobs.
+  3. **Live Operational Alerts Feed:** Real-time anomaly feed identifying critical business risks (unassigned interns, overdue reviews, missing documents, overloaded mentors, and past-due tasks) with direct administrative module deep-links.
+- **9 Deterministic Business Rules:**
+  - `AUTO_ATTENDANCE_CLOSE`: Daily Lagos cutoff (09:00:00) absence reconciliation for enrolled interns.
+  - `AUTO_OVERDUE_TASKS`: Overdue task detection and status escalation to `overdue`.
+  - `AUTO_TRAINING_PROGRESS`: Curriculum module completion aggregation per intern.
+  - `AUTO_PERF_REMINDERS`: Mentor performance evaluation reminders for active periods.
+  - `AUTO_DOC_EXPIRY`: Compliance and document expiration auditor.
+  - `AUTO_CERT_ELIGIBILITY`: Authoritative 4-Gate Certificate Criteria evaluator.
+  - `AUTO_COHORT_LIFECYCLE`: Cohort transition engine (`upcoming` -> `active` -> `completed`).
+  - `AUTO_MENTOR_WORKLOAD`: Mentor allocation capacity monitor (threshold: 15 interns).
+  - `AUTO_SCHEDULED_REPORT`: Executive operational digest generator.
+- **Deterministic SHA-256 Idempotency Engine:** Prevents duplicate side-effects on repeated execution cycles (`ruleCode:entity:cycleDate`). Non-forced repeated triggers cleanly return `skipped`.
+- **Bounded Retries:** Automatic failure recovery bounded to a maximum of 3 retries. Only `failed` or `partial_failure` runs can be retried.
+- **Role-Based Access Control:** Strictly restricted to `super_admin` and `admin`. Direct access or API requests by `mentor` and `intern` roles return `403 Forbidden`.
+
+---
+
+## 9. Implementation Status Matrix (Phases 1–9)
+
+| Phase | Module | Status | Assertions | Key Milestones |
+| :--- | :--- | :---: | :---: | :--- |
+| **Phase 1** | Foundation, Auth & DB | Passed | 45 | MySQL schema, JWT auth, Bcrypt passwords |
+| **Phase 2** | Attendance & Timezone | Passed | 52 | Africa/Lagos timezone, 09:00 AM cutoff |
+| **Phase 3** | Interns, Cohorts & Tracks | Passed | 48 | Intern lifecycle, track management |
+| **Phase 4** | Tasks & Submissions | Passed | 56 | Task assignments, grading, submissions |
+| **Phase 5** | Evaluations & Feedback | Passed | 58 | Multi-factor metrics, mentor reviews |
+| **Phase 6** | Documents & Certificates | Passed | 64 | 4-Gate certification, verification |
+| **Phase 7** | Communications & Alerts | Passed | 73 | Announcements, in-app notifications |
+| **Phase 8** | Administration & Governance | Passed | 78 | RBAC matrix, audit logs, system config |
+| **Phase 9** | Advanced ERP & Automation | Passed | 78 | 9 rules, idempotency, bounded retries |
+| **Cumulative**| **Full ERP System** | **ALL PASSED** | **637** | **11 Suites, 0 Failures, 0 Skipped** |
+
+---
+
+## 10. Comprehensive Verification & Testing
+
+```bash
+# Run Phase 9 dedicated test suite (78 assertions)
+cd backend
+npm run test:phase9
+
+# Run full project regression suite (637 assertions across all 11 modules)
 cd backend
 npm run test:all
 
@@ -154,3 +206,4 @@ npm run test:all
 cd frontend
 npm run build
 ```
+
