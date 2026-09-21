@@ -20,9 +20,10 @@ MySQL Relational Database `jowis_studio_erp` (XAMPP Port 3306)
 
 ---
 
-## 2. Default Demo Credentials
+## 2. Local Demo Credentials
 
-For development and evaluation, the database is pre-seeded with realistic accounts:
+> [!CAUTION]
+> The following credentials are provided **strictly for local development, evaluation, and automated testing**. NEVER deploy these default passwords or mock secrets to any public, staging, or production environment. In production, always generate high-entropy passwords and random cryptographic secrets as outlined in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 | Role | Email | Password | Details |
 | :--- | :--- | :--- | :--- |
@@ -34,7 +35,7 @@ For development and evaluation, the database is pre-seeded with realistic accoun
 | **Intern 2** | `intern.zainab@jowis.com` | `Intern@12345` | Zainab Bello (`JOWIS-INT-2026-002`) |
 
 > [!NOTE]
-> The login portal at `http://localhost:5173/login` includes one-click quick demo buttons to instantly populate credentials for rapid testing.
+> The local development login portal at `http://localhost:5173/login` includes one-click demo buttons to instantly populate credentials for rapid testing.
 
 ---
 
@@ -185,7 +186,7 @@ Phase 10 transition the ERP to institutional deployment readiness through an exh
 
 ---
 
-## 10. Implementation Status Matrix (Phases 1–10)
+## 10. Implementation Status Matrix (Phases 1–11)
 
 | Phase | Module | Status | Assertions | Key Milestones |
 | :--- | :--- | :---: | :---: | :--- |
@@ -199,20 +200,27 @@ Phase 10 transition the ERP to institutional deployment readiness through an exh
 | **Phase 8** | Administration & Governance | Passed | 78 | RBAC matrix, audit logs, system config |
 | **Phase 9** | Advanced ERP & Automation | Passed | 78 | 9 rules, idempotency, bounded retries |
 | **Phase 10**| Final QA & Deployment | Passed | 75 | Forensic audit, upload hardening, 20 gates |
-| **Cumulative**| **Full ERP System** | **ALL PASSED** | **712** | **12 Suites, 0 Failures, 0 Skipped** |
+| **Phase 11**| Production Deployment Readiness | Passed | 58 | Automated backups, DR rehearsal, CORS & upload hardening, live DB health check |
+| **Cumulative**| **Full ERP System** | **ALL PASSED** | **770** | **13 Suites, 0 Failures, 0 Skipped** |
 
 ---
 
 ## 11. Comprehensive Verification & Testing
 
 ```bash
-# Run Phase 10 dedicated QA & hardening suite (75 assertions)
+# Run Phase 11 dedicated production readiness suite (58 assertions)
 cd backend
-npm run test:phase10
+npm run test:phase11
 
-# Run full project regression suite (712 assertions across all 12 modules)
+# Run full project regression suite (770 assertions across all 13 suites)
 cd backend
 npm run test:all
+
+# Execute automated database backup
+npm run db:backup
+
+# Execute automated database restore / recovery rehearsal
+npm run db:restore
 
 # Production frontend build
 cd frontend
@@ -221,10 +229,21 @@ npm run build
 
 ---
 
-## 12. Deployment Checklist & Notes
+## 12. Production Deployment & Operations
 
-1. **Environment Configuration:** Copy `backend/.env.example` to `backend/.env` and configure `NODE_ENV=production`, custom `JWT_SECRET`, and production database credentials.
-2. **Database Initialization:** Run `npm run init-db` in `backend/` to provision schema, constraints, and baseline institutional records.
-3. **Frontend Build:** Run `npm run build` in `frontend/` to generate production assets in `frontend/dist/`.
-4. **Reverse Proxy:** Direct `/api` and `/uploads` requests to the Node.js process (port 5000) and serve `frontend/dist/` statically.
+For complete step-by-step production setup, process clustering, Nginx reverse proxy configuration, automated database backups, and disaster recovery procedures, refer to the comprehensive [Production Deployment Guide](docs/DEPLOYMENT.md).
+
+### Quick Production Run Commands
+```bash
+# 1. Start backend in production mode (or use PM2 cluster)
+cd backend
+npm run start:prod
+
+# 2. Build frontend production bundle (outputs to frontend/dist/ with .htaccess)
+cd frontend
+npm run build
+
+# 3. Live Health & Database Connectivity Probe
+curl -I http://localhost:5000/api/health
+```
 

@@ -22,21 +22,34 @@ import automationRoutes from './routes/automationRoutes.js';
 
 const app = express();
 
-// CORS setup
-const allowedOrigins = [
-  process.env.CORS_ORIGIN || 'http://localhost:5173',
+import { query } from './config/db.js';
+
+// Production & Development CORS Configuration (Gate 9)
+const isProd = process.env.NODE_ENV === 'production';
+const configuredOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
+const devOrigins = [
+  'http://localhost:5173',
   'http://localhost:5174',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
 ];
+
+const allowedOrigins = isProd
+  ? (configuredOrigins.length > 0 ? configuredOrigins : ['https://erp.jowis.com'])
+  : [...new Set([...devOrigins, ...configuredOrigins])];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl)
+    // Allow non-browser requests (e.g. curl, automated scripts, health probes)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.startsWith('http://localhost:')) {
+    if (allowedOrigins.includes(origin) || (!isProd && origin.startsWith('http://localhost:'))) {
       return callback(null, true);
     }
-    return callback(null, true); // Permissive in local development
+    return callback(new Error(`CORS Alert: Origin '${origin}' is not permitted by institutional Access-Control policy.`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -49,21 +62,34 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-// Serve uploaded submission files
+// Serve uploaded submission files with directory indexing disabled (Gate 5)
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), { dotfiles: 'ignore', index: false }));
 
-// Root Health Check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    system: 'Jowis Studio Internship ERP API',
-    timezone: process.env.APP_TIMEZONE || 'Africa/Lagos',
-    timestamp: new Date().toISOString()
-  });
+// Root Health & Uptime Check (Gate 13)
+app.get('/api/health', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({
+      status: 'ok',
+      system: 'Jowis Studio Internship ERP API',
+      database: 'connected',
+      uptime: process.uptime(),
+      timezone: process.env.APP_TIMEZONE || 'Africa/Lagos',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'error',
+      system: 'Jowis Studio Internship ERP API',
+      database: 'disconnected',
+      error: 'Database unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Mount Routes

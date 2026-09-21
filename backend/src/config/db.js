@@ -12,6 +12,7 @@ const pool = mysql.createPool({
   connectionLimit: 15,
   queueLimit: 0,
   timezone: '+01:00', // Africa/Lagos UTC+1
+  charset: 'utf8mb4',
   dateStrings: true
 });
 
