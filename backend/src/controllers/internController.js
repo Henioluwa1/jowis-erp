@@ -436,6 +436,18 @@ export const updateIntern = async (req, res) => {
       return res.json({ success: true, message: 'Profile contact details updated.' });
     }
 
+    // Guard: Mentors and unauthorized roles cannot edit administrative profile fields
+    if (req.user.role === 'mentor') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Mentors are not authorized to edit intern administrative profiles.'
+      });
+    }
+
+    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Administrative privileges required.' });
+    }
+
     // Admin updates
     await query(
       `UPDATE intern_profiles

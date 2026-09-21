@@ -18,8 +18,8 @@ async function updateAnnouncementLifecycles() {
       await query(`
         UPDATE announcements 
         SET status = 'published', published_at = NOW()
-        WHERE id IN (${ids.join(',')})
-      `);
+        WHERE id IN (${ids.map(() => '?').join(',')})
+      `, ids);
 
       // Dispatch notifications for freshly published announcements
       for (const item of dueScheduled) {
@@ -284,11 +284,11 @@ export const getAnnouncements = async (req, res) => {
         AND (
           a.target_type = 'all'
           OR a.target_type = 'mentors'
-          ${cohortIds.length > 0 ? `OR (a.target_type = 'cohort' AND a.target_id IN (${cohortIds.join(',')}))` : ''}
-          ${trackIds.length > 0 ? `OR (a.target_type = 'track' AND a.target_id IN (${trackIds.join(',')}))` : ''}
+          ${cohortIds.length > 0 ? `OR (a.target_type = 'cohort' AND a.target_id IN (${cohortIds.map(() => '?').join(',')}))` : ''}
+          ${trackIds.length > 0 ? `OR (a.target_type = 'track' AND a.target_id IN (${trackIds.map(() => '?').join(',')}))` : ''}
         )
       `;
-      const mentorParams = [];
+      const mentorParams = [...cohortIds, ...trackIds];
 
       if (priority && priority !== 'all') {
         mentorWhere += ' AND a.priority = ?';
@@ -768,6 +768,7 @@ export const getAudiencePreview = async (req, res) => {
     }
 
     // Fetch details for sample users (up to 10)
+    const sampleIds = userIds.slice(0, 10);
     const sampleUsers = await query(`
       SELECT u.id, u.first_name, u.last_name, u.email, r.name as role_name,
              ip.intern_code, t.name as track_name, c.name as cohort_name
@@ -776,8 +777,8 @@ export const getAudiencePreview = async (req, res) => {
       LEFT JOIN intern_profiles ip ON u.id = ip.user_id
       LEFT JOIN tracks t ON ip.track_id = t.id
       LEFT JOIN cohorts c ON ip.cohort_id = c.id
-      WHERE u.id IN (${userIds.slice(0, 10).join(',')})
-    `);
+      WHERE u.id IN (${sampleIds.map(() => '?').join(',')})
+    `, sampleIds);
 
     res.json({
       success: true,
@@ -920,10 +921,11 @@ export const getAnnouncementAcknowledgements = async (req, res) => {
       });
     }
 
-    const userInClause = targetUserIds.join(',');
+    const placeholders = targetUserIds.map(() => '?').join(',');
 
     // Fetch targeted users along with acknowledgement info
-    let whereFilter = `u.id IN (${userInClause})`;
+    let whereFilter = `u.id IN (${placeholders})`;
+    const filterParams = [...targetUserIds];
     if (status === 'acknowledged') {
       whereFilter += ` AND ack.id IS NOT NULL`;
     } else if (status === 'pending') {
@@ -935,14 +937,14 @@ export const getAnnouncementAcknowledgements = async (req, res) => {
       FROM users u
       LEFT JOIN announcement_acknowledgements ack ON (ack.announcement_id = ? AND ack.user_id = u.id)
       WHERE ${whereFilter}
-    `, [id]);
+    `, [id, ...filterParams]);
     const totalFiltered = countRows[0].total;
 
     const ackCountRows = await query(`
       SELECT COUNT(*) as count
       FROM announcement_acknowledgements
-      WHERE announcement_id = ? AND user_id IN (${userInClause})
-    `, [id]);
+      WHERE announcement_id = ? AND user_id IN (${placeholders})
+    `, [id, ...targetUserIds]);
     const acknowledgedCount = ackCountRows[0].count;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -963,7 +965,7 @@ export const getAnnouncementAcknowledgements = async (req, res) => {
       WHERE ${whereFilter}
       ORDER BY is_acknowledged ASC, u.last_name ASC
       LIMIT ? OFFSET ?
-    `, [id, limitNum, offset]);
+    `, [id, ...filterParams, limitNum, offset]);
 
     res.json({
       success: true,

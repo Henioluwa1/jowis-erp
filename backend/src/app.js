@@ -93,10 +93,15 @@ app.use((req, res) => {
 // Centralized Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
-  const status = err.status || 500;
+  const status = err.status || (err.name === 'ValidationError' ? 400 : 500);
+  const isProd = process.env.NODE_ENV === 'production';
+  const message = isProd && status === 500
+    ? 'An internal server error occurred.'
+    : (err.message || 'An internal server error occurred.');
+
   res.status(status).json({
     success: false,
-    message: err.message || 'An internal server error occurred.'
+    message
   });
 });
 

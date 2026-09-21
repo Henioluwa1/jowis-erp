@@ -18,6 +18,7 @@ import {
   Layers,
   FileCheck,
   User,
+  Users,
   GraduationCap
 } from 'lucide-react';
 
@@ -106,9 +107,16 @@ export const DocumentsPage = () => {
 
       const res = await api.get('/documents', { params });
       if (res.data?.success) {
-        setDocuments(res.data.data || []);
-        if (res.data.pagination) {
-          setQueuePagination(res.data.pagination);
+        const records = Array.isArray(res.data.data) ? res.data.data : (res.data.data?.records || []);
+        setDocuments(records);
+        const pagination = res.data.pagination || (res.data.data?.page ? {
+          page: res.data.data.page,
+          limit: res.data.data.limit,
+          total: res.data.data.total,
+          pages: Math.ceil((res.data.data.total || 0) / (res.data.data.limit || 15)) || 1
+        } : null);
+        if (pagination) {
+          setQueuePagination(pagination);
         }
       }
     } catch (err) {

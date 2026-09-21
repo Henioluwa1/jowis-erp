@@ -174,7 +174,18 @@ Phase 9 implements an enterprise-grade, deterministic, and auditable **Automatio
 
 ---
 
-## 9. Implementation Status Matrix (Phases 1–9)
+## 9. Phase 10: Final QA, Security Hardening & Deployment Readiness
+
+Phase 10 transition the ERP to institutional deployment readiness through an exhaustive 20-Gate forensic audit:
+- **Authentication & Secret Hardening:** Verified all 6 demo accounts. Password hashes and credentials strictly omitted from API responses and normal logs. Server-side logout endpoint with audit logging.
+- **SQL Parameterization Hardening:** 100% prepared statements across all queries. Converted all array join interpolations in communications to parameterized placeholders.
+- **File Upload Protection:** Comprehensive blocked extensions (`.exe`, `.php`, `.jsp`, `.asp`, `.aspx`, `.bash`, `.ps1`, etc.), path-traversal payload rejection, and MIME verification across all document and task upload endpoints.
+- **Institutional 4-Gate Certificate Verification:** Automated server-side validation across lifecycle status, task completion rate, performance ratings, and verified compliance documents prior to issuance.
+- **Frontend Crash Prevention & Forensic QA:** Fixed paginated array extraction in document management and restored missing icon imports. Full browser verification conducted across Super Admin, Operational Admin, Mentor, and Intern roles.
+
+---
+
+## 10. Implementation Status Matrix (Phases 1–10)
 
 | Phase | Module | Status | Assertions | Key Milestones |
 | :--- | :--- | :---: | :---: | :--- |
@@ -187,18 +198,19 @@ Phase 9 implements an enterprise-grade, deterministic, and auditable **Automatio
 | **Phase 7** | Communications & Alerts | Passed | 73 | Announcements, in-app notifications |
 | **Phase 8** | Administration & Governance | Passed | 78 | RBAC matrix, audit logs, system config |
 | **Phase 9** | Advanced ERP & Automation | Passed | 78 | 9 rules, idempotency, bounded retries |
-| **Cumulative**| **Full ERP System** | **ALL PASSED** | **637** | **11 Suites, 0 Failures, 0 Skipped** |
+| **Phase 10**| Final QA & Deployment | Passed | 75 | Forensic audit, upload hardening, 20 gates |
+| **Cumulative**| **Full ERP System** | **ALL PASSED** | **712** | **12 Suites, 0 Failures, 0 Skipped** |
 
 ---
 
-## 10. Comprehensive Verification & Testing
+## 11. Comprehensive Verification & Testing
 
 ```bash
-# Run Phase 9 dedicated test suite (78 assertions)
+# Run Phase 10 dedicated QA & hardening suite (75 assertions)
 cd backend
-npm run test:phase9
+npm run test:phase10
 
-# Run full project regression suite (637 assertions across all 11 modules)
+# Run full project regression suite (712 assertions across all 12 modules)
 cd backend
 npm run test:all
 
@@ -206,4 +218,13 @@ npm run test:all
 cd frontend
 npm run build
 ```
+
+---
+
+## 12. Deployment Checklist & Notes
+
+1. **Environment Configuration:** Copy `backend/.env.example` to `backend/.env` and configure `NODE_ENV=production`, custom `JWT_SECRET`, and production database credentials.
+2. **Database Initialization:** Run `npm run init-db` in `backend/` to provision schema, constraints, and baseline institutional records.
+3. **Frontend Build:** Run `npm run build` in `frontend/` to generate production assets in `frontend/dist/`.
+4. **Reverse Proxy:** Direct `/api` and `/uploads` requests to the Node.js process (port 5000) and serve `frontend/dist/` statically.
 

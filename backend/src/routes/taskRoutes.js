@@ -25,7 +25,10 @@ const router = express.Router();
 
 // 1. Intern Specific Workspace Endpoints (Gate 5 & 8)
 router.get('/me', authenticateJWT, getMyTasks);
+router.get('/my-tasks', authenticateJWT, getMyTasks);
 router.patch('/me/assignments/:id/status', authenticateJWT, updateMyTaskStatus);
+router.patch('/my-tasks/:id/status', authenticateJWT, updateMyTaskStatus);
+
 
 // 2. Submission System (Gate 6) - with optional multipart file attachment upload
 router.post('/submit', authenticateJWT, submissionUpload.single('attachment'), submitTaskWork);

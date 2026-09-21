@@ -173,3 +173,19 @@ export const changePassword = async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error updating password.' });
   }
 };
+
+export const logout = async (req, res) => {
+  try {
+    if (req.user) {
+      await recordAuditLog(req.user.id, 'LOGOUT', 'user', req.user.id, null, null, req, 'User logged out');
+    }
+    res.json({
+      success: true,
+      message: 'Logout successful.'
+    });
+  } catch (error) {
+    console.error('logout error:', error);
+    res.status(500).json({ success: false, message: 'Server error during logout.' });
+  }
+};
+

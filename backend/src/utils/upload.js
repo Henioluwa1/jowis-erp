@@ -11,10 +11,11 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Disallowed executable extensions
+// Disallowed executable and script extensions
 const DISALLOWED_EXTENSIONS = new Set([
   '.exe', '.bat', '.cmd', '.sh', '.php', '.phtml', '.php3', '.php4', '.php5',
-  '.pl', '.cgi', '.py', '.rb', '.vbs', '.js', '.jar', '.dll', '.com', '.scr', '.msi'
+  '.pl', '.cgi', '.py', '.rb', '.vbs', '.js', '.jar', '.dll', '.com', '.scr',
+  '.msi', '.jsp', '.asp', '.aspx', '.bash', '.ps1', '.elf', '.bin'
 ]);
 
 const storage = multer.diskStorage({
@@ -30,10 +31,28 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
+  // Path traversal check
+  if (file.originalname.includes('..') || file.originalname.includes('\0') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    return cb(new Error('Security Alert: Malformed or path-traversal detected in filename.'));
+  }
+
   const ext = path.extname(file.originalname).toLowerCase();
   if (DISALLOWED_EXTENSIONS.has(ext)) {
     return cb(new Error(`Security Alert: File type '${ext}' is not permitted for submissions.`));
   }
+
+  // Dangerous MIME type check
+  const mime = (file.mimetype || '').toLowerCase();
+  if (
+    mime.includes('javascript') ||
+    mime.includes('php') ||
+    mime.includes('executable') ||
+    mime.includes('x-msdownload') ||
+    mime.includes('x-sh')
+  ) {
+    return cb(new Error(`Security Alert: Dangerous MIME type '${file.mimetype}' rejected.`));
+  }
+
   cb(null, true);
 };
 

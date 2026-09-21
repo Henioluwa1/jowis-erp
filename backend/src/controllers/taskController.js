@@ -1370,7 +1370,9 @@ export const getMentorWorkspace = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Mentor profile not found.' });
     }
 
-    const mentorFilter = req.user.role === 'mentor' ? `(ip.mentor_id = ${mentorId} OR c.lead_mentor_id = ${mentorId})` : '1=1';
+    const isMentor = req.user.role === 'mentor';
+    const mentorParams = isMentor ? [mentorId, mentorId] : [];
+    const mentorFilter = isMentor ? '(ip.mentor_id = ? OR c.lead_mentor_id = ?)' : '1=1';
 
     // 1. Assigned Cohorts
     const cohorts = await query(`
@@ -1379,9 +1381,9 @@ export const getMentorWorkspace = async (req, res) => {
       FROM cohorts c
       JOIN tracks tr ON c.track_id = tr.id
       LEFT JOIN intern_profiles ip ON c.id = ip.cohort_id
-      WHERE ${req.user.role === 'mentor' ? 'c.lead_mentor_id = ' + mentorId : '1=1'}
+      WHERE ${isMentor ? 'c.lead_mentor_id = ?' : '1=1'}
       GROUP BY c.id
-    `);
+    `, isMentor ? [mentorId] : []);
 
     // 2. Supervised Interns
     const interns = await query(`
@@ -1397,7 +1399,7 @@ export const getMentorWorkspace = async (req, res) => {
       WHERE ${mentorFilter}
       ORDER BY ip.id DESC
       LIMIT 25
-    `);
+    `, mentorParams);
 
     // 3. Submissions Awaiting Mentor's Review
     const pendingReviews = await query(`
@@ -1412,7 +1414,8 @@ export const getMentorWorkspace = async (req, res) => {
       LEFT JOIN cohorts c ON ip.cohort_id = c.id
       WHERE ts.status = 'submitted' AND ${mentorFilter}
       ORDER BY ts.submitted_at ASC
-    `);
+    `, mentorParams);
+
 
     // 4. Recently Reviewed Work
     const recentlyReviewed = await query(`

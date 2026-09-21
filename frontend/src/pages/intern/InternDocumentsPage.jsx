@@ -62,7 +62,8 @@ export const InternDocumentsPage = () => {
         setCompletenessData(compRes.data.data);
       }
       if (docsRes.data?.success) {
-        setMyDocuments(docsRes.data.data || []);
+        const records = Array.isArray(docsRes.data.data) ? docsRes.data.data : (docsRes.data.data?.records || []);
+        setMyDocuments(records);
       }
       if (typesRes.data?.success) {
         setDocTypes(typesRes.data.data || []);
