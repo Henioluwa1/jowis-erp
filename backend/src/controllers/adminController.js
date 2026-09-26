@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
 import { getLagosNow } from '../utils/timezone.js';
+import { generateSecureTemporaryPassword } from '../utils/passwordGenerator.js';
+import notificationService from '../services/notificationService.js';
 
 // ============================================================================
 // 1. GOVERNANCE & ADMINISTRATIVE OVERVIEW DASHBOARD (Gate 5)
@@ -261,10 +263,10 @@ export const createUser = async (req, res) => {
       avatarUrl
     } = req.body;
 
-    if (!firstName || !firstName.trim() || !lastName || !lastName.trim() || !email || !email.trim() || !password) {
+    if (!firstName || !firstName.trim() || !lastName || !lastName.trim() || !email || !email.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'First name, last name, email, and password are required.'
+        message: 'First name, last name, and institutional email are required.'
       });
     }
 
@@ -273,12 +275,10 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 8 characters long.'
-      });
-    }
+    // Automatically generate a cryptographically secure temporary password (Part 3)
+    const tempPassword = (password && password.trim().length >= 8)
+      ? password.trim()
+      : generateSecureTemporaryPassword(14);
 
     // Resolve target role
     let targetRole;
@@ -315,13 +315,14 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Hash password
+    // Hash temporary password
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const passwordHash = await bcrypt.hash(tempPassword, salt);
 
+    // Insert user with must_change_password = 1 (Part 4)
     const result = await query(`
-      INSERT INTO users (role_id, email, password_hash, first_name, last_name, phone, avatar_url, is_active, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
+      INSERT INTO users (role_id, email, password_hash, first_name, last_name, phone, avatar_url, is_active, must_change_password, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, NOW())
     `, [
       targetRole.id,
       email.trim().toLowerCase(),
@@ -349,6 +350,16 @@ export const createUser = async (req, res) => {
       VALUES (?, 1, 1, 1, 1, 1, 0)
     `, [newUserId]);
 
+    // Send Welcome Notification (Part 10)
+    await notificationService.createNotification({
+      userId: newUserId,
+      type: 'system',
+      title: 'Welcome to Jowis Studio ERP',
+      message: 'Welcome to Jowis Studio ERP. Your account has been created successfully. For security, please change your temporary password to a password of your choice.',
+      link: '/profile'
+    });
+
+    // Record Audit Log (Part 25: Never log password or plaintext credentials)
     await recordAuditLog(
       req.user.id,
       'CREATE_USER',
@@ -357,9 +368,10 @@ export const createUser = async (req, res) => {
       null,
       { email: email.trim().toLowerCase(), firstName: firstName.trim(), lastName: lastName.trim(), role: targetRole.name },
       req,
-      `User account created with role ${targetRole.name}`
+      `User account provisioned with role ${targetRole.name} and temporary credentials`
     );
 
+    // Return credentials once for administrator display (Part 5)
     res.status(201).json({
       success: true,
       message: 'User account created successfully.',
@@ -368,9 +380,22 @@ export const createUser = async (req, res) => {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
+        username: email.trim().toLowerCase(),
         roleName: targetRole.name,
         roleId: targetRole.id,
-        isActive: 1
+        isActive: 1,
+        mustChangePassword: true,
+        temporaryPassword: tempPassword,
+        user: {
+          id: newUserId,
+          email: email.trim().toLowerCase(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          roleName: targetRole.name,
+          roleId: targetRole.id,
+          isActive: 1,
+          mustChangePassword: true
+        }
       }
     });
   } catch (error) {
@@ -617,13 +642,6 @@ export const resetUserPassword = async (req, res) => {
     const { id } = req.params;
     const { newPassword, reason } = req.body;
 
-    if (!newPassword || newPassword.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password is required and must be at least 8 characters long.'
-      });
-    }
-
     const [targetUser] = await query(`
       SELECT u.*, r.name as role_name 
       FROM users u 
@@ -643,10 +661,25 @@ export const resetUserPassword = async (req, res) => {
       });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(newPassword, salt);
+    // Generate secure temporary password if not explicitly supplied (Part 13)
+    const tempPassword = (newPassword && newPassword.trim().length >= 8)
+      ? newPassword.trim()
+      : generateSecureTemporaryPassword(14);
 
-    await query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(tempPassword, salt);
+
+    // Update password and flag must_change_password = 1
+    await query('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?', [passwordHash, id]);
+
+    // Send reset notification
+    await notificationService.createNotification({
+      userId: Number(id),
+      type: 'system',
+      title: 'Security Notice: Password Reset',
+      message: 'Your password has been administratively reset with temporary credentials. You will be required to change your password upon your next login.',
+      link: '/profile'
+    });
 
     const cleanReason = reason ? reason.trim() : 'Administrative password reset initiated by administrator';
     await recordAuditLog(
@@ -662,7 +695,14 @@ export const resetUserPassword = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Password reset successfully for user ${targetUser.email}.`
+      message: `Password reset successfully for user ${targetUser.email}. Temporary credentials generated.`,
+      data: {
+        id: Number(id),
+        email: targetUser.email,
+        username: targetUser.email,
+        temporaryPassword: tempPassword,
+        mustChangePassword: true
+      }
     });
   } catch (error) {
     console.error('resetUserPassword error:', error);

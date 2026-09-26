@@ -11,8 +11,11 @@ import {
   Clock,
   CheckSquare,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Printer
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 import {
   ResponsiveContainer,
   RadarChart,
@@ -83,23 +86,48 @@ export const InternPerformancePage = () => {
           </p>
         </div>
 
-        {/* Period Selector */}
-        {periods.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <select
-              value={selectedPeriodId}
-              onChange={(e) => handlePeriodChange(e.target.value)}
-              className="erp-input py-1.5 px-3 text-xs bg-slate-900 border-slate-700"
-            >
-              {periods.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.overall_score}%)
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium rounded-lg transition-all cursor-pointer"
+            title="Print / Save PDF"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Report</span>
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/performance', `jowis-my-performance-${new Date().toISOString().split('T')[0]}.csv`, {
+                  periodId: selectedPeriodId || undefined
+                });
+              } catch (err) {
+                alert(err.message || 'Failed to export performance CSV');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+          {/* Period Selector */}
+          {periods.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <select
+                value={selectedPeriodId}
+                onChange={(e) => handlePeriodChange(e.target.value)}
+                className="erp-input py-1.5 px-3 text-xs bg-slate-900 border-slate-700"
+              >
+                {periods.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.overall_score}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {latest ? (

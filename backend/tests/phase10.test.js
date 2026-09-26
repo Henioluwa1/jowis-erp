@@ -143,6 +143,15 @@ async function runPhase10Tests() {
       });
       const data = await res.json();
       assert(res.status === 200 && data.success, 'POST /api/auth/logout succeeds with 200 OK');
+
+      // Re-authenticate super admin to continue remaining tests with an active token
+      const reloginRes = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'admin@jowis.com', password: 'Admin@12345' })
+      });
+      const reloginData = await reloginRes.json();
+      superAdminToken = reloginData.token;
     }
 
     // -------------------------------------------------------------

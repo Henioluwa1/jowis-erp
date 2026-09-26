@@ -20,9 +20,9 @@ import {
   Ban,
   Send,
   Users,
-  CheckSquare,
   BarChart3
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 
 export const CertificatesPage = () => {
   const { role } = useAuth();
@@ -276,6 +276,22 @@ export const CertificatesPage = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/certificates', `jowis-certificates-registry-${new Date().toISOString().split('T')[0]}.csv`, {
+                  status: statusFilter || undefined,
+                  search: searchQuery.trim() || undefined
+                });
+              } catch (err) {
+                setErrorMsg(err.message || 'Failed to export certificates registry CSV.');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-amber-400" />
+            <span>Export Registry CSV</span>
+          </button>
           <button
             onClick={() => {
               if (activeTab === 'registry') fetchCertificates();

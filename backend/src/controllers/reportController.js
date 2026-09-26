@@ -2,20 +2,24 @@ import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
 
 /**
- * Helper to convert array of objects to standard RFC-4180 CSV string
+ * Helper to convert array of objects to standard RFC-4180 CSV string with UTF-8 BOM
  */
 export const toCSV = (rows, headers) => {
-  if (!rows || rows.length === 0) return '';
-  const headerLine = headers.map(h => `"${h.label}"`).join(',');
+  if (!headers || headers.length === 0) return '';
+  const headerLine = headers.map(h => `"${String(h.label || '').replace(/"/g, '""')}"`).join(',');
+  if (!rows || rows.length === 0) return '\uFEFF' + headerLine;
   const bodyLines = rows.map(row => {
     return headers.map(h => {
       let val = row[h.key];
       if (val === null || val === undefined) val = '';
+      if (val instanceof Date) {
+        val = val.toISOString().split('T')[0];
+      }
       val = String(val).replace(/"/g, '""');
       return `"${val}"`;
     }).join(',');
   });
-  return [headerLine, ...bodyLines].join('\r\n');
+  return '\uFEFF' + [headerLine, ...bodyLines].join('\r\n');
 };
 
 /**
@@ -1259,14 +1263,26 @@ export const getReportDrillDown = async (req, res) => {
 /**
  * Standard RFC-4180 UTF-8 CSV Exporter with Audit Log Integration
  */
+/**
+ * Standard RFC-4180 UTF-8 CSV Exporter with Server-Side RBAC & Filter Enforcement
+ */
 export const exportReportCSV = async (req, res) => {
   try {
     const { type } = req.params;
     const { startDate, endDate, trackId, cohortId } = req.query;
 
+    // Check institutional administrative privilege for sensitive entities
+    if (['users', 'audit_logs', 'automation'].includes(type) && !['super_admin', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Insufficient privileges to export administrative institutional records.'
+      });
+    }
+
     let records = [];
     let headers = [];
-    let filename = `${type}_export_${Date.now()}.csv`;
+    const dateStamp = new Date().toISOString().split('T')[0];
+    let filename = `jowis-${type.replace(/_/g, '-')}-report-${dateStamp}.csv`;
 
     switch (type) {
       case 'attendance': {
@@ -1276,10 +1292,18 @@ export const exportReportCSV = async (req, res) => {
         if (endDate) { conds.push('a.attendance_date <= ?'); params.push(endDate); }
         if (trackId && trackId !== 'ALL') { conds.push('ip.track_id = ?'); params.push(trackId); }
         if (cohortId && cohortId !== 'ALL') { conds.push('ip.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('a.status = ?'); params.push(req.query.status.toLowerCase()); }
 
-        if (req.user.role === 'mentor') {
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('a.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
           conds.push('(ip.mentor_id = ? OR c.lead_mentor_id = ?)');
           params.push(req.user.mentorId, req.user.mentorId);
+        } else if (req.query.mentorId && req.query.mentorId !== 'ALL') {
+          conds.push('ip.mentor_id = ?');
+          params.push(req.query.mentorId);
         }
 
         const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
@@ -1307,7 +1331,8 @@ export const exportReportCSV = async (req, res) => {
           { key: 'cohort_name', label: 'Cohort' },
           { key: 'check_in_time', label: 'Check-In' },
           { key: 'status', label: 'Status' },
-          { key: 'late_minutes', label: 'Late Minutes' }
+          { key: 'late_minutes', label: 'Late Minutes' },
+          { key: 'notes', label: 'Notes' }
         ];
         break;
       }
@@ -1317,10 +1342,23 @@ export const exportReportCSV = async (req, res) => {
         let params = [];
         if (trackId && trackId !== 'ALL') { conds.push('ip.track_id = ?'); params.push(trackId); }
         if (cohortId && cohortId !== 'ALL') { conds.push('ip.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('ip.status = ?'); params.push(req.query.status.toLowerCase()); }
+        if (req.query.search && req.query.search.trim()) {
+          conds.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR ip.intern_code LIKE ?)');
+          const term = `%${req.query.search.trim()}%`;
+          params.push(term, term, term, term);
+        }
 
-        if (req.user.role === 'mentor') {
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('ip.id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
           conds.push('(ip.mentor_id = ? OR c.lead_mentor_id = ?)');
           params.push(req.user.mentorId, req.user.mentorId);
+        } else if (req.query.mentorId && req.query.mentorId !== 'ALL') {
+          conds.push('ip.mentor_id = ?');
+          params.push(req.query.mentorId);
         }
 
         const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
@@ -1328,22 +1366,32 @@ export const exportReportCSV = async (req, res) => {
         records = await query(`
           SELECT ip.intern_code, u.first_name, u.last_name, u.email, ip.phone,
                  ip.status, t.name as track_name, c.name as cohort_name,
+                 mu.first_name as mentor_first, mu.last_name as mentor_last,
                  ip.start_date, ip.expected_end_date, ip.actual_end_date
           FROM intern_profiles ip
           JOIN users u ON ip.user_id = u.id
           JOIN tracks t ON ip.track_id = t.id
           JOIN cohorts c ON ip.cohort_id = c.id
+          LEFT JOIN mentors m ON ip.mentor_id = m.id
+          LEFT JOIN users mu ON m.user_id = mu.id
           ${where}
           ORDER BY ip.id ASC
         `, params);
+
+        records = records.map(r => ({
+          ...r,
+          mentor_name: r.mentor_first ? `${r.mentor_first} ${r.mentor_last}` : 'Unassigned'
+        }));
 
         headers = [
           { key: 'intern_code', label: 'Intern Code' },
           { key: 'first_name', label: 'First Name' },
           { key: 'last_name', label: 'Last Name' },
           { key: 'email', label: 'Email' },
+          { key: 'phone', label: 'Phone' },
           { key: 'track_name', label: 'Track' },
           { key: 'cohort_name', label: 'Cohort' },
+          { key: 'mentor_name', label: 'Assigned Mentor' },
           { key: 'status', label: 'Status' },
           { key: 'start_date', label: 'Start Date' },
           { key: 'expected_end_date', label: 'Expected End Date' }
@@ -1354,7 +1402,17 @@ export const exportReportCSV = async (req, res) => {
       case 'tasks': {
         let conds = [];
         let params = [];
-        if (req.user.role === 'mentor') {
+        if (trackId && trackId !== 'ALL') { conds.push('t.track_id = ?'); params.push(trackId); }
+        if (cohortId && cohortId !== 'ALL') { conds.push('ta.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('ta.status = ?'); params.push(req.query.status.toLowerCase()); }
+        if (req.query.taskType && req.query.taskType !== 'ALL') { conds.push('t.task_type = ?'); params.push(req.query.taskType); }
+        if (req.query.difficulty && req.query.difficulty !== 'ALL') { conds.push('t.difficulty = ?'); params.push(req.query.difficulty); }
+
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('ta.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
           conds.push('(ip.mentor_id = ? OR c.lead_mentor_id = ?)');
           params.push(req.user.mentorId, req.user.mentorId);
         }
@@ -1365,7 +1423,8 @@ export const exportReportCSV = async (req, res) => {
           SELECT ta.id, t.title as task_title, t.task_type, t.difficulty,
                  ip.intern_code, u.first_name, u.last_name,
                  tr.name as track_name, c.name as cohort_name,
-                 ta.due_date, ta.status, ts.score, t.max_score
+                 ta.due_date, ta.status, ts.score, t.max_score,
+                 ts.submitted_at
           FROM task_assignments ta
           JOIN tasks t ON ta.task_id = t.id
           JOIN intern_profiles ip ON ta.intern_id = ip.id
@@ -1389,7 +1448,8 @@ export const exportReportCSV = async (req, res) => {
           { key: 'due_date', label: 'Due Date' },
           { key: 'status', label: 'Status' },
           { key: 'score', label: 'Score' },
-          { key: 'max_score', label: 'Max Score' }
+          { key: 'max_score', label: 'Max Score' },
+          { key: 'submitted_at', label: 'Submitted Date' }
         ];
         break;
       }
@@ -1397,7 +1457,16 @@ export const exportReportCSV = async (req, res) => {
       case 'performance': {
         let conds = [];
         let params = [];
-        if (req.user.role === 'mentor') {
+        if (trackId && trackId !== 'ALL') { conds.push('pe.track_id = ?'); params.push(trackId); }
+        if (cohortId && cohortId !== 'ALL') { conds.push('pe.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.periodId && req.query.periodId !== 'ALL') { conds.push('pe.period_id = ?'); params.push(req.query.periodId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('pe.status = ?'); params.push(req.query.status.toLowerCase()); }
+
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('pe.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
           conds.push('(ip.mentor_id = ? OR c.lead_mentor_id = ? OR pe.reviewer_id = ?)');
           params.push(req.user.mentorId, req.user.mentorId, req.user.id);
         }
@@ -1408,17 +1477,23 @@ export const exportReportCSV = async (req, res) => {
           SELECT pe.id, ip.intern_code, u.first_name, u.last_name,
                  tr.name as track_name, c.name as cohort_name,
                  pp.name as period_name, pe.overall_score, pe.overall_rating,
-                 pe.status, ru.first_name as reviewer_first, ru.last_name as reviewer_last
+                 pe.status, ru.first_name as reviewer_first, ru.last_name as reviewer_last,
+                 pe.finalized_at
           FROM performance_evaluations pe
           JOIN intern_profiles ip ON pe.intern_id = ip.id
           JOIN users u ON ip.user_id = u.id
           JOIN tracks tr ON pe.track_id = tr.id
           JOIN cohorts c ON pe.cohort_id = c.id
-          JOIN users ru ON pe.reviewer_id = ru.id
+          LEFT JOIN users ru ON pe.reviewer_id = ru.id
           LEFT JOIN performance_periods pp ON pe.period_id = pp.id
           ${where}
           ORDER BY pe.id DESC
         `, params);
+
+        records = records.map(r => ({
+          ...r,
+          reviewer_name: r.reviewer_first ? `${r.reviewer_first} ${r.reviewer_last}` : 'Pending'
+        }));
 
         headers = [
           { key: 'intern_code', label: 'Intern Code' },
@@ -1430,8 +1505,8 @@ export const exportReportCSV = async (req, res) => {
           { key: 'overall_score', label: 'Overall Score (%)' },
           { key: 'overall_rating', label: 'Rating Band' },
           { key: 'status', label: 'Status' },
-          { key: 'reviewer_first', label: 'Reviewer First Name' },
-          { key: 'reviewer_last', label: 'Reviewer Last Name' }
+          { key: 'reviewer_name', label: 'Reviewer' },
+          { key: 'finalized_at', label: 'Finalized Date' }
         ];
         break;
       }
@@ -1439,6 +1514,9 @@ export const exportReportCSV = async (req, res) => {
       case 'cohorts': {
         let conds = [];
         let params = [];
+        if (trackId && trackId !== 'ALL') { conds.push('c.track_id = ?'); params.push(trackId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('c.status = ?'); params.push(req.query.status.toLowerCase()); }
+
         if (req.user.role === 'mentor') {
           conds.push('(c.lead_mentor_id = ? OR c.id IN (SELECT cohort_id FROM intern_profiles WHERE mentor_id = ?))');
           params.push(req.user.mentorId, req.user.mentorId);
@@ -1448,7 +1526,8 @@ export const exportReportCSV = async (req, res) => {
 
         records = await query(`
           SELECT c.id, c.name, c.cohort_code, tr.name as track_name,
-                 c.start_date, c.end_date, c.status
+                 c.start_date, c.end_date, c.capacity, c.status,
+                 (SELECT COUNT(*) FROM intern_profiles WHERE cohort_id = c.id) as enrolled_count
           FROM cohorts c
           JOIN tracks tr ON c.track_id = tr.id
           ${where}
@@ -1461,13 +1540,408 @@ export const exportReportCSV = async (req, res) => {
           { key: 'track_name', label: 'Track' },
           { key: 'start_date', label: 'Start Date' },
           { key: 'end_date', label: 'End Date' },
+          { key: 'capacity', label: 'Capacity' },
+          { key: 'enrolled_count', label: 'Enrolled Interns' },
           { key: 'status', label: 'Status' }
+        ];
+        break;
+      }
+
+      case 'tracks': {
+        let conds = [];
+        let params = [];
+        if (req.query.status && req.query.status !== 'ALL') {
+          conds.push('t.is_active = ?');
+          params.push(req.query.status === 'active' || req.query.status === '1' ? 1 : 0);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT t.id, t.name, t.code as track_code, t.duration_weeks, t.is_active,
+                 COUNT(DISTINCT ip.id) as enrolled_interns
+          FROM tracks t
+          LEFT JOIN intern_profiles ip ON t.id = ip.track_id
+          ${where}
+          GROUP BY t.id, t.name, t.code, t.duration_weeks, t.is_active
+          ORDER BY t.name ASC
+        `, params);
+
+        records = records.map(r => ({
+          ...r,
+          status_label: r.is_active === 1 ? 'Active' : 'Inactive'
+        }));
+
+        headers = [
+          { key: 'track_code', label: 'Track Code' },
+          { key: 'name', label: 'Track Name' },
+          { key: 'duration_weeks', label: 'Duration (Weeks)' },
+          { key: 'enrolled_interns', label: 'Enrolled Interns' },
+          { key: 'status_label', label: 'Status' }
+        ];
+        break;
+      }
+
+      case 'mentors': {
+        records = await query(`
+          SELECT m.id, u.first_name, u.last_name, u.email, m.specialization,
+                 COUNT(DISTINCT ip.id) as assigned_interns
+          FROM mentors m
+          JOIN users u ON m.user_id = u.id
+          LEFT JOIN intern_profiles ip ON m.id = ip.mentor_id
+          GROUP BY m.id
+          ORDER BY assigned_interns DESC
+        `);
+        headers = [
+          { key: 'id', label: 'Mentor ID' },
+          { key: 'first_name', label: 'First Name' },
+          { key: 'last_name', label: 'Last Name' },
+          { key: 'email', label: 'Email' },
+          { key: 'specialization', label: 'Specialization' },
+          { key: 'assigned_interns', label: 'Assigned Interns' }
+        ];
+        break;
+      }
+
+      case 'executive': {
+        if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Forbidden: Executive summary exports require administrative privileges.' });
+        }
+        const [summary] = await query(`
+          SELECT 
+            (SELECT COUNT(*) FROM intern_profiles WHERE status = 'active') as active_interns,
+            (SELECT COUNT(*) FROM cohorts WHERE status = 'active') as active_cohorts,
+            (SELECT COUNT(*) FROM tracks WHERE is_active = 1) as active_tracks,
+            (SELECT COUNT(*) FROM mentors) as total_mentors,
+            (SELECT COUNT(*) FROM task_assignments WHERE status = 'completed') as completed_tasks,
+            (SELECT COUNT(*) FROM certificates WHERE status = 'issued') as issued_certificates
+        `);
+        records = [summary];
+        headers = [
+          { key: 'active_interns', label: 'Active Interns' },
+          { key: 'active_cohorts', label: 'Active Cohorts' },
+          { key: 'active_tracks', label: 'Active Tracks' },
+          { key: 'total_mentors', label: 'Total Mentors' },
+          { key: 'completed_tasks', label: 'Completed Tasks' },
+          { key: 'issued_certificates', label: 'Issued Certificates' }
+        ];
+        break;
+      }
+
+      case 'users': {
+        let conds = [];
+        let params = [];
+        if (req.query.roleId && req.query.roleId !== 'ALL') { conds.push('u.role_id = ?'); params.push(req.query.roleId); }
+        if (req.query.roleName && req.query.roleName !== 'ALL') { conds.push('r.name = ?'); params.push(req.query.roleName); }
+        if (req.query.status !== undefined && req.query.status !== 'ALL') {
+          conds.push('u.is_active = ?');
+          params.push(req.query.status === 'active' || req.query.status === '1' ? 1 : 0);
+        }
+        if (req.query.search && req.query.search.trim()) {
+          conds.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ?)');
+          const term = `%${req.query.search.trim()}%`;
+          params.push(term, term, term);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT u.id, u.first_name, u.last_name, u.email, u.phone,
+                 r.name as role_name,
+                 u.is_active, u.must_change_password, u.last_login, u.created_at,
+                 t.name as track_name, c.name as cohort_name
+          FROM users u
+          JOIN roles r ON u.role_id = r.id
+          LEFT JOIN intern_profiles ip ON u.id = ip.user_id
+          LEFT JOIN tracks t ON ip.track_id = t.id
+          LEFT JOIN cohorts c ON ip.cohort_id = c.id
+          ${where}
+          ORDER BY u.id ASC
+        `, params);
+
+        records = records.map(r => ({
+          ...r,
+          status_label: r.is_active === 1 ? 'Active' : 'Deactivated',
+          must_change_label: r.must_change_password === 1 ? 'Yes (Temporary)' : 'No (Active)',
+          last_login_label: r.last_login ? new Date(r.last_login).toISOString().replace('T', ' ').substring(0, 19) : 'Never'
+        }));
+
+        headers = [
+          { key: 'id', label: 'User ID' },
+          { key: 'first_name', label: 'First Name' },
+          { key: 'last_name', label: 'Last Name' },
+          { key: 'email', label: 'Email / Username' },
+          { key: 'phone', label: 'Phone' },
+          { key: 'role_name', label: 'Role' },
+          { key: 'track_name', label: 'Track' },
+          { key: 'cohort_name', label: 'Cohort' },
+          { key: 'status_label', label: 'Status' },
+          { key: 'must_change_label', label: 'Temporary Password' },
+          { key: 'last_login_label', label: 'Last Login' },
+          { key: 'created_at', label: 'Created At' }
+        ];
+        break;
+      }
+
+      case 'audit_logs': {
+        let conds = [];
+        let params = [];
+        if (req.query.action && req.query.action !== 'ALL') { conds.push('al.action = ?'); params.push(req.query.action); }
+        if (req.query.entityType && req.query.entityType !== 'ALL') { conds.push('al.entity_type = ?'); params.push(req.query.entityType); }
+        if (req.query.startDate) { conds.push('al.created_at >= ?'); params.push(req.query.startDate); }
+        if (req.query.endDate) { conds.push('al.created_at <= ?'); params.push(req.query.endDate + ' 23:59:59'); }
+        if (req.query.search && req.query.search.trim()) {
+          conds.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.email LIKE ? OR al.reason LIKE ?)');
+          const term = `%${req.query.search.trim()}%`;
+          params.push(term, term, term, term);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT al.id, al.created_at, al.action, al.entity_type, al.entity_id, al.reason, al.status, al.ip_address,
+                 u.first_name, u.last_name, u.email, r.name as role_name
+          FROM audit_logs al
+          LEFT JOIN users u ON al.user_id = u.id
+          LEFT JOIN roles r ON u.role_id = r.id
+          ${where}
+          ORDER BY al.id DESC
+          LIMIT 5000
+        `, params);
+
+        records = records.map(r => ({
+          ...r,
+          actor_name: r.first_name ? `${r.first_name} ${r.last_name}` : 'System',
+          actor_email: r.email || 'system@internal',
+          actor_role: r.role_name || 'system'
+        }));
+
+        headers = [
+          { key: 'id', label: 'Log ID' },
+          { key: 'created_at', label: 'Timestamp' },
+          { key: 'actor_name', label: 'Actor Name' },
+          { key: 'actor_email', label: 'Actor Email' },
+          { key: 'actor_role', label: 'Actor Role' },
+          { key: 'action', label: 'Action' },
+          { key: 'entity_type', label: 'Entity Type' },
+          { key: 'entity_id', label: 'Entity ID' },
+          { key: 'status', label: 'Status' },
+          { key: 'ip_address', label: 'IP Address' },
+          { key: 'reason', label: 'Justification / Reason' }
+        ];
+        break;
+      }
+
+      case 'automation': {
+        records = await query(`
+          SELECT ar.id, ar.name, ar.trigger_type, ar.action_type, ar.category, ar.is_enabled, ar.created_at,
+                 (SELECT COUNT(*) FROM automation_executions WHERE rule_id = ar.id) as total_runs,
+                 (SELECT status FROM automation_executions WHERE rule_id = ar.id ORDER BY id DESC LIMIT 1) as last_status,
+                 (SELECT start_time FROM automation_executions WHERE rule_id = ar.id ORDER BY id DESC LIMIT 1) as last_run_at
+          FROM automation_rules ar
+          ORDER BY ar.id ASC
+        `);
+
+        records = records.map(r => ({
+          ...r,
+          status_label: r.is_enabled === 1 ? 'Enabled' : 'Disabled',
+          last_status: r.last_status || 'Never Executed'
+        }));
+
+        headers = [
+          { key: 'id', label: 'Rule ID' },
+          { key: 'name', label: 'Rule Name' },
+          { key: 'category', label: 'Category' },
+          { key: 'trigger_type', label: 'Trigger Type' },
+          { key: 'action_type', label: 'Action Type' },
+          { key: 'status_label', label: 'State' },
+          { key: 'total_runs', label: 'Total Executions' },
+          { key: 'last_status', label: 'Last Run Status' },
+          { key: 'last_run_at', label: 'Last Executed At' },
+          { key: 'created_at', label: 'Created At' }
+        ];
+        break;
+      }
+
+      case 'certificates': {
+        let conds = [];
+        let params = [];
+        if (trackId && trackId !== 'ALL') { conds.push('c.track_id = ?'); params.push(trackId); }
+        if (cohortId && cohortId !== 'ALL') { conds.push('c.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.typeId && req.query.typeId !== 'ALL') { conds.push('c.certificate_type_id = ?'); params.push(req.query.typeId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('c.status = ?'); params.push(req.query.status.toLowerCase()); }
+
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('c.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
+          conds.push('(ip.mentor_id = ? OR co.lead_mentor_id = ?)');
+          params.push(req.user.mentorId, req.user.mentorId);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT c.id, c.certificate_number, c.verification_code, c.status, c.issue_date, c.completion_date,
+                 ip.intern_code, u.first_name, u.last_name, u.email,
+                 ct.name as cert_type_name, tr.name as track_name, co.name as cohort_name
+          FROM certificates c
+          JOIN intern_profiles ip ON c.intern_id = ip.id
+          JOIN users u ON ip.user_id = u.id
+          JOIN certificate_types ct ON c.certificate_type_id = ct.id
+          LEFT JOIN tracks tr ON c.track_id = tr.id
+          LEFT JOIN cohorts co ON c.cohort_id = co.id
+          ${where}
+          ORDER BY c.id DESC
+        `, params);
+
+        headers = [
+          { key: 'certificate_number', label: 'Certificate Number' },
+          { key: 'verification_code', label: 'Verification Code' },
+          { key: 'intern_code', label: 'Intern Code' },
+          { key: 'first_name', label: 'First Name' },
+          { key: 'last_name', label: 'Last Name' },
+          { key: 'email', label: 'Email' },
+          { key: 'cert_type_name', label: 'Certificate Type' },
+          { key: 'track_name', label: 'Track' },
+          { key: 'cohort_name', label: 'Cohort' },
+          { key: 'status', label: 'Status' },
+          { key: 'issue_date', label: 'Issue Date' }
+        ];
+        break;
+      }
+
+      case 'documents': {
+        let conds = [];
+        let params = [];
+        if (cohortId && cohortId !== 'ALL') { conds.push('ip.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.typeId && req.query.typeId !== 'ALL') { conds.push('idoc.document_type_id = ?'); params.push(req.query.typeId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('idoc.status = ?'); params.push(req.query.status.toLowerCase()); }
+
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('idoc.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
+          conds.push('(ip.mentor_id = ? OR co.lead_mentor_id = ?)');
+          params.push(req.user.mentorId, req.user.mentorId);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT idoc.id, idoc.original_filename, idoc.status, idoc.expiry_date, idoc.verified_at, idoc.created_at,
+                 ip.intern_code, u.first_name, u.last_name, u.email,
+                 dt.name as document_type_name, dt.category
+          FROM intern_documents idoc
+          JOIN intern_profiles ip ON idoc.intern_id = ip.id
+          JOIN users u ON ip.user_id = u.id
+          JOIN document_types dt ON idoc.document_type_id = dt.id
+          LEFT JOIN cohorts co ON ip.cohort_id = co.id
+          ${where}
+          ORDER BY idoc.id DESC
+        `, params);
+
+        headers = [
+          { key: 'id', label: 'Document ID' },
+          { key: 'intern_code', label: 'Intern Code' },
+          { key: 'first_name', label: 'First Name' },
+          { key: 'last_name', label: 'Last Name' },
+          { key: 'email', label: 'Email' },
+          { key: 'document_type_name', label: 'Document Type' },
+          { key: 'category', label: 'Category' },
+          { key: 'original_filename', label: 'File Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'expiry_date', label: 'Expiry Date' },
+          { key: 'created_at', label: 'Uploaded At' }
+        ];
+        break;
+      }
+
+      case 'personal_scorecard':
+      case 'scorecard': {
+        const internId = req.user.role === 'intern'
+          ? req.user.internProfileId
+          : (req.query.internId || req.user.internProfileId);
+
+        if (!internId) {
+          return res.status(400).json({ success: false, message: 'Intern profile ID is required for scorecard export.' });
+        }
+
+        const [internRow] = await query(`
+          SELECT ip.intern_code, u.first_name, u.last_name, u.email, tr.name as track_name, co.name as cohort_name
+          FROM intern_profiles ip
+          JOIN users u ON ip.user_id = u.id
+          JOIN tracks tr ON ip.track_id = tr.id
+          JOIN cohorts co ON ip.cohort_id = co.id
+          WHERE ip.id = ?
+        `, [internId]);
+
+        const [att] = await query(`
+          SELECT COUNT(*) as total_days,
+                 SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_days,
+                 SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_days,
+                 SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent_days
+          FROM attendance WHERE intern_id = ?
+        `, [internId]);
+
+        const [tasks] = await query(`
+          SELECT COUNT(*) as total_tasks,
+                 SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_tasks,
+                 SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_tasks,
+                 SUM(CASE WHEN due_date < NOW() AND status IN ('assigned', 'in_progress') THEN 1 ELSE 0 END) as overdue_tasks
+          FROM task_assignments WHERE intern_id = ?
+        `, [internId]);
+
+        const [perf] = await query(`
+          SELECT pe.overall_score, pe.overall_rating, pe.status, pp.name as period_name
+          FROM performance_evaluations pe
+          LEFT JOIN performance_periods pp ON pe.period_id = pp.id
+          WHERE pe.intern_id = ? AND pe.status = 'finalized'
+          ORDER BY pe.finalized_at DESC LIMIT 1
+        `, [internId]);
+
+        const totalAtt = parseInt(att?.total_days || 0, 10);
+        const presentAtt = parseInt(att?.present_days || 0, 10);
+        const lateAtt = parseInt(att?.late_days || 0, 10);
+        const attRate = totalAtt > 0 ? `${Math.round(((presentAtt + lateAtt) / totalAtt) * 100)}%` : '100%';
+
+        records = [
+          { domain: 'Profile', metric: 'Intern Name', value: `${internRow?.first_name || ''} ${internRow?.last_name || ''}`.trim(), notes: internRow?.email || '' },
+          { domain: 'Profile', metric: 'Intern Code', value: internRow?.intern_code || '', notes: '' },
+          { domain: 'Profile', metric: 'Track / Program', value: internRow?.track_name || '', notes: internRow?.cohort_name || '' },
+          { domain: 'Attendance', metric: 'Attendance Rate', value: attRate, notes: `${presentAtt + lateAtt} attended of ${totalAtt} sessions` },
+          { domain: 'Attendance', metric: 'Total Sessions Recorded', value: totalAtt, notes: '' },
+          { domain: 'Attendance', metric: 'Late Days', value: parseInt(att?.late_days || 0, 10), notes: '' },
+          { domain: 'Attendance', metric: 'Absent Days', value: parseInt(att?.absent_days || 0, 10), notes: '' },
+          { domain: 'Tasks', metric: 'Total Assigned Tasks', value: parseInt(tasks?.total_tasks || 0, 10), notes: '' },
+          { domain: 'Tasks', metric: 'Completed Tasks', value: parseInt(tasks?.completed_tasks || 0, 10), notes: '' },
+          { domain: 'Tasks', metric: 'In Progress Tasks', value: parseInt(tasks?.in_progress_tasks || 0, 10), notes: '' },
+          { domain: 'Tasks', metric: 'Overdue Tasks', value: parseInt(tasks?.overdue_tasks || 0, 10), notes: '' },
+          { domain: 'Performance', metric: 'Formal Evaluation Score', value: perf?.overall_score !== undefined ? `${perf.overall_score}%` : 'Pending Review', notes: perf?.period_name || '' },
+          { domain: 'Performance', metric: 'Performance Rating Band', value: perf?.overall_rating || 'In Progress', notes: perf?.status || '' }
+        ];
+
+        headers = [
+          { key: 'domain', label: 'Domain' },
+          { key: 'metric', label: 'Metric Name' },
+          { key: 'value', label: 'Recorded Value' },
+          { key: 'notes', label: 'Additional Notes' }
         ];
         break;
       }
 
       default:
         return res.status(400).json({ success: false, message: `Unsupported export type: '${type}'` });
+    }
+
+    // Check for empty dataset (Part 20)
+    if (!records || records.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No records match the selected filters.'
+      });
     }
 
     const csvData = toCSV(records, headers);

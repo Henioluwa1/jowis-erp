@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
 import { getLagosDate } from '../utils/timezone.js';
+import { generateSecureTemporaryPassword } from '../utils/passwordGenerator.js';
+import notificationService from '../services/notificationService.js';
 
 // 9 Permitted lifecycle statuses
 export const ALLOWED_LIFECYCLE_STATUSES = [
@@ -302,18 +304,29 @@ export const createIntern = async (req, res) => {
     }
 
     // Validate dates
-    const finalEnd = expectedEndDate || '2026-08-31';
+    let finalEnd = expectedEndDate;
+    if (!finalEnd) {
+      const d = new Date(startDate);
+      d.setMonth(d.getMonth() + 6);
+      finalEnd = d.toISOString().split('T')[0];
+    }
     if (new Date(finalEnd) < new Date(startDate)) {
       return res.status(400).json({ success: false, message: 'Expected end date cannot precede start date.' });
     }
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password || 'Intern@12345', 10);
+    // Automatically generate cryptographically secure temporary password (Part 3)
+    const tempPassword = (password && password.trim().length >= 8)
+      ? password.trim()
+      : generateSecureTemporaryPassword(14);
 
-    // 1. Create User
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(tempPassword, salt);
+
+    // 1. Create User with must_change_password = 1 (Part 4)
     const userResult = await query(
-      `INSERT INTO users (role_id, email, password_hash, first_name, last_name, phone, is_active)
-       VALUES (4, ?, ?, ?, ?, ?, 1)`,
+      `INSERT INTO users (role_id, email, password_hash, first_name, last_name, phone, is_active, must_change_password)
+       VALUES (4, ?, ?, ?, ?, ?, 1, 1)`,
       [cleanEmail, passwordHash, firstName.trim(), lastName.trim(), phone ? phone.trim() : null]
     );
     const userId = userResult.insertId;
@@ -383,6 +396,21 @@ export const createIntern = async (req, res) => {
       );
     }
 
+    // Seed default notification preferences
+    await query(`
+      INSERT IGNORE INTO notification_preferences (user_id, announcements_in_app, tasks_in_app, performance_in_app, documents_in_app, system_in_app, email_notifications)
+      VALUES (?, 1, 1, 1, 1, 1, 0)
+    `, [userId]);
+
+    // Send Welcome Notification (Part 10)
+    await notificationService.createNotification({
+      userId,
+      type: 'system',
+      title: 'Welcome to Jowis Studio ERP',
+      message: 'Welcome to Jowis Studio ERP. Your account has been created successfully. For security, please change your temporary password to a password of your choice.',
+      link: '/profile'
+    });
+
     await recordAuditLog(req.user.id, 'CREATE_INTERN', 'intern_profiles', internProfileId, null, { email: cleanEmail, internCode, trackId, cohortId }, req);
 
     res.status(201).json({
@@ -392,8 +420,14 @@ export const createIntern = async (req, res) => {
         id: internProfileId,
         userId,
         internCode,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         email: cleanEmail,
-        status: 'active'
+        username: cleanEmail,
+        roleName: 'intern',
+        status: 'active',
+        mustChangePassword: true,
+        temporaryPassword: tempPassword
       }
     });
   } catch (error) {

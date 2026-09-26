@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { downloadCSV as exportHelper } from '../../utils/exportUtil';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -226,8 +227,18 @@ export const AttendancePage = () => {
     }
   };
 
-  const downloadCSV = () => {
-    window.open(`/api/reports/attendance/csv`, '_blank');
+  const downloadCSV = async () => {
+    try {
+      await exportHelper('/reports/export/attendance', `jowis-attendance-report-${new Date().toISOString().split('T')[0]}.csv`, {
+        date: selectedDate || undefined,
+        trackId: selectedTrack || undefined,
+        cohortId: selectedCohort || undefined,
+        status: selectedStatus || undefined,
+        search: searchTerm.trim() || undefined
+      });
+    } catch (err) {
+      alert(err.message || 'Failed to download attendance CSV');
+    }
   };
 
   return (

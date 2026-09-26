@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { downloadCSV } from '../../utils/exportUtil';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { CredentialDisplayModal } from '../../components/common/CredentialDisplayModal';
 import {
   Users,
   Search,
@@ -44,6 +46,7 @@ export const InternsPage = () => {
   const [cohortFilter, setCohortFilter] = useState('');
   const [mentorFilter, setMentorFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [credentialData, setCredentialData] = useState(null);
 
   // Add modal
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -155,11 +158,17 @@ export const InternsPage = () => {
     try {
       const res = await api.post('/interns', newIntern);
       if (res.data.success) {
-        setModalSuccess('Intern enrolled successfully with active lifecycle state!');
-        setTimeout(() => {
-          setAddModalOpen(false);
-          fetchInterns();
-        }, 1000);
+        setAddModalOpen(false);
+        const tempPass = res.data.data?.temporaryPassword;
+        if (tempPass) {
+          setCredentialData({
+            fullName: `${newIntern.firstName} ${newIntern.lastName}`,
+            role: 'Intern',
+            identifier: res.data.data?.email || newIntern.email,
+            temporaryPassword: tempPass
+          });
+        }
+        fetchInterns();
       }
     } catch (err) {
       setModalError(err.response?.data?.message || 'Failed to create intern.');
@@ -267,7 +276,19 @@ export const InternsPage = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.open('/api/reports/interns/csv', '_blank')}
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/interns', `jowis-interns-roster-${new Date().toISOString().split('T')[0]}.csv`, {
+                  trackId: trackFilter || undefined,
+                  cohortId: cohortFilter || undefined,
+                  mentorId: mentorFilter || undefined,
+                  status: statusFilter || undefined,
+                  search: searchTerm.trim() || undefined
+                });
+              } catch (err) {
+                alert(err.message || 'Failed to export interns CSV');
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors cursor-pointer"
           >
             <FileDown className="w-4 h-4" />
@@ -962,6 +983,12 @@ export const InternsPage = () => {
           </div>
         </Modal>
       )}
+      {/* Credential Display Modal (Part 5) */}
+      <CredentialDisplayModal
+        isOpen={Boolean(credentialData)}
+        onClose={() => setCredentialData(null)}
+        credentialData={credentialData}
+      />
     </div>
   );
 };

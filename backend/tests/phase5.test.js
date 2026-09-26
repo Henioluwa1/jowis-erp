@@ -416,10 +416,10 @@ async function runPhase5Tests() {
     });
     assert(internBlocked6.status === 403, 'Intern accessing /reports/drill-down must return 403 Forbidden');
 
-    const internBlocked7 = await fetch(`${baseUrl}/reports/export/attendance`, {
+    const internBlocked7 = await fetch(`${baseUrl}/reports/export/executive`, {
       headers: { Authorization: `Bearer ${intern1Token}` }
     });
-    assert(internBlocked7.status === 403, 'Intern accessing /reports/export must return 403 Forbidden');
+    assert(internBlocked7.status === 403, 'Intern accessing /reports/export/executive must return 403 Forbidden');
 
     // -------------------------------------------------------------
     // GATE 15: Mentor Scoping & Isolation

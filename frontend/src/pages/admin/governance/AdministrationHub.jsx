@@ -31,8 +31,11 @@ import {
   Save,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  FileDown
 } from 'lucide-react';
+import { downloadCSV } from '../../../utils/exportUtil';
+import { CredentialDisplayModal } from '../../../components/common/CredentialDisplayModal';
 
 export const AdministrationHub = () => {
   const { user: currentUser, role: userRole } = useAuth();
@@ -63,6 +66,7 @@ export const AdministrationHub = () => {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [credentialData, setCredentialData] = useState(null);
 
   // Form States
   const [newUserForm, setNewUserForm] = useState({
@@ -207,15 +211,24 @@ export const AdministrationHub = () => {
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (newUserForm.password.length < 8) {
-      showFeedback('error', 'Password must be at least 8 characters long.');
+    if (newUserForm.password && newUserForm.password.length < 8) {
+      showFeedback('error', 'If provided, initial password must be at least 8 characters long.');
       return;
     }
     try {
       const res = await api.post('/admin/users', newUserForm);
       if (res.data.success) {
-        showFeedback('success', `User "${newUserForm.email}" created successfully.`);
         setShowCreateUserModal(false);
+        const tempPass = res.data.data?.temporaryPassword;
+        if (tempPass) {
+          setCredentialData({
+            fullName: `${newUserForm.firstName} ${newUserForm.lastName}`,
+            role: newUserForm.roleName,
+            identifier: newUserForm.email,
+            temporaryPassword: tempPass
+          });
+        }
+        showFeedback('success', `User "${newUserForm.email}" created successfully.`);
         setNewUserForm({ firstName: '', lastName: '', email: '', password: '', roleName: 'mentor', phone: '' });
         fetchUsers();
       }
@@ -268,18 +281,27 @@ export const AdministrationHub = () => {
   };
 
   const handleResetPassword = async () => {
-    if (!passwordForm.newPassword || passwordForm.newPassword.length < 8) {
-      showFeedback('error', 'New password must be at least 8 characters long.');
+    if (passwordForm.newPassword && passwordForm.newPassword.length < 8) {
+      showFeedback('error', 'If provided, new password must be at least 8 characters long.');
       return;
     }
     try {
       const res = await api.post(`/admin/users/${selectedUser.id}/reset-password`, {
-        newPassword: passwordForm.newPassword,
+        newPassword: passwordForm.newPassword || undefined,
         reason: passwordForm.reason.trim() || 'Administrative reset requested'
       });
       if (res.data.success) {
-        showFeedback('success', res.data.message);
         setShowPasswordModal(false);
+        const tempPass = res.data.data?.temporaryPassword;
+        if (tempPass) {
+          setCredentialData({
+            fullName: `${selectedUser.first_name} ${selectedUser.last_name}`,
+            role: selectedUser.role_name,
+            identifier: selectedUser.email,
+            temporaryPassword: tempPass
+          });
+        }
+        showFeedback('success', res.data.message);
         setPasswordForm({ newPassword: '', reason: '' });
       }
     } catch (err) {
@@ -610,13 +632,32 @@ export const AdministrationHub = () => {
               </select>
             </div>
 
-            <button
-              onClick={() => setShowCreateUserModal(true)}
-              className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all self-start md:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Provision User Account</span>
-            </button>
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              <button
+                onClick={async () => {
+                  try {
+                    await downloadCSV('/reports/export/users', `jowis-users-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                      role: userRoleFilter !== 'all' ? userRoleFilter : undefined,
+                      status: userStatusFilter !== 'all' ? userStatusFilter : undefined,
+                      search: userSearch.trim() || undefined
+                    });
+                  } catch (err) {
+                    showFeedback('error', err.message || 'Failed to export users CSV.');
+                  }
+                }}
+                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <FileDown className="w-4 h-4" />
+                <span>Export Users</span>
+              </button>
+              <button
+                onClick={() => setShowCreateUserModal(true)}
+                className="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Provision User Account</span>
+              </button>
+            </div>
           </div>
 
           {/* Users Table */}
@@ -1081,6 +1122,24 @@ export const AdministrationHub = () => {
                 <option value="announcements">announcements</option>
               </select>
             </div>
+
+            <button
+              onClick={async () => {
+                try {
+                  await downloadCSV('/reports/export/audit_logs', `jowis-audit-logs-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                    action: auditActionFilter !== 'all' ? auditActionFilter : undefined,
+                    entityType: auditEntityFilter !== 'all' ? auditEntityFilter : undefined,
+                    search: auditSearch.trim() || undefined
+                  });
+                } catch (err) {
+                  showFeedback('error', err.message || 'Failed to export audit logs CSV.');
+                }
+              }}
+              className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>Export Audit Trail</span>
+            </button>
           </div>
 
           {/* Audit Logs Table */}
@@ -1239,14 +1298,17 @@ export const AdministrationHub = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Initial Password * (min 8)</label>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Initial Password <span className="text-slate-500 text-[10px] font-normal">(Auto-generated if empty)</span>
+                  </label>
                   <input
                     type="password"
-                    required
                     value={newUserForm.password}
                     onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-brand-500 font-mono"
+                    placeholder="Leave empty for auto-generated"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-brand-500 font-mono text-xs placeholder:text-slate-600"
                   />
+                  <p className="text-[10px] text-brand-400/80 mt-1">A secure 14-char temporary password will be generated and displayed.</p>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Role Assignment *</label>
@@ -1450,13 +1512,17 @@ export const AdministrationHub = () => {
 
             <div className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">New Password * (min 8 chars)</label>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  New Password <span className="text-slate-500 text-[10px] font-normal">(Auto-generated if empty)</span>
+                </label>
                 <input
                   type="password"
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500"
+                  placeholder="Leave empty for auto-generated temporary password"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-brand-500 text-xs placeholder:text-slate-600"
                 />
+                <p className="text-[10px] text-brand-400/80 mt-1">If blank, a secure temporary password will be generated for the user.</p>
               </div>
 
               <div>
@@ -1566,6 +1632,12 @@ export const AdministrationHub = () => {
           </div>
         </div>
       )}
+      {/* Credential Display Modal (Part 5) */}
+      <CredentialDisplayModal
+        isOpen={Boolean(credentialData)}
+        onClose={() => setCredentialData(null)}
+        credentialData={credentialData}
+      />
     </div>
   );
 };

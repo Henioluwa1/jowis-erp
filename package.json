@@ -1,0 +1,14 @@
+{
+  "name": "jowis-erp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jowis Studio Enterprise Internship ERP",
+  "type": "module",
+  "scripts": {
+    "dev": "node start-dev.js",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm start --prefix backend",
+    "start": "node start-dev.js",
+    "install:all": "npm install --prefix backend && npm install --prefix frontend"
+  }
+}

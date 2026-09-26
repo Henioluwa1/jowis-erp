@@ -50,7 +50,7 @@ router.get('/time-series', authenticateJWT, authorizeRoles('super_admin', 'admin
 router.get('/drill-down', authenticateJWT, authorizeRoles('super_admin', 'admin', 'mentor'), getReportDrillDown);
 
 // Standard RFC-4180 CSV Exporter (Gate 13 & 17)
-router.get('/export/:type', authenticateJWT, authorizeRoles('super_admin', 'admin', 'mentor'), exportReportCSV);
+router.get('/export/:type', authenticateJWT, authorizeRoles('super_admin', 'admin', 'mentor', 'intern'), exportReportCSV);
 
 // Intern Personal Scorecard (Gate 14)
 router.get('/me', authenticateJWT, authorizeRoles('intern'), getMyPersonalAnalytics);

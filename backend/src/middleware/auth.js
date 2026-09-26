@@ -3,20 +3,41 @@ import { query } from '../config/db.js';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'jowis_studio_erp_jwt_secret_key_2026_super_secure';
 
+export const revokedTokens = new Set();
+
+// Production JWT security check (V-07)
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'jowis_studio_erp_jwt_secret_key_2026_super_secure')) {
+  console.warn('⚠️ SECURITY WARNING: Insecure default JWT_SECRET is active in production!');
+}
+
 /**
  * Verify JWT Token and attach user + role to req.user
  */
 export const authenticateJWT = async (req, res, next) => {
   try {
+    let token = null;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.query && (req.query.token || req.query.auth_token)) {
+      token = req.query.token || req.query.auth_token;
+    }
+
+    if (!token) {
       return res.status(401).json({
         success: false,
         message: 'Authentication required. No Bearer token provided.'
       });
     }
 
-    const token = authHeader.split(' ')[1];
+    // Check token revocation denylist (V-06)
+    if (revokedTokens.has(token)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Session has been invalidated. Please log in again.'
+      });
+    }
+
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
@@ -29,7 +50,7 @@ export const authenticateJWT = async (req, res, next) => {
 
     // Fetch fresh user details from database
     const users = await query(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active,
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.phone, u.avatar_url, u.is_active, u.must_change_password,
               r.name as role_name, r.id as role_id,
               ip.id as intern_profile_id, ip.intern_code, ip.track_id as intern_track_id, ip.cohort_id as intern_cohort_id,
               m.id as mentor_id
@@ -60,8 +81,23 @@ export const authenticateJWT = async (req, res, next) => {
       internCode: user.intern_code,
       trackId: user.intern_track_id,
       cohortId: user.intern_cohort_id,
-      mentorId: user.mentor_id
+      mentorId: user.mentor_id,
+      mustChangePassword: Boolean(user.must_change_password)
     };
+
+    // Strict Enforcement Barrier: Must change temporary password before accessing operational APIs (Part 9)
+    if (req.user.mustChangePassword) {
+      const allowedPaths = ['/auth/me', '/auth/change-password', '/auth/logout'];
+      const rawPath = (req.baseUrl + req.path).replace(/^\/api/, '');
+      const isPermitted = allowedPaths.some(p => rawPath === p || rawPath.startsWith(p + '/'));
+      if (!isPermitted) {
+        return res.status(403).json({
+          success: false,
+          code: 'MUST_CHANGE_PASSWORD',
+          message: 'Security Notice: You must change your temporary password before accessing ERP operations.'
+        });
+      }
+    }
 
     next();
   } catch (error) {

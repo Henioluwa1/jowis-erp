@@ -23,9 +23,11 @@ import {
   Trash2,
   Power,
   Eye,
-  Check,
   X
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
+
+const isSafeUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url.trim());
 
 export const TasksAdminPage = () => {
   const [activeSubTab, setActiveSubTab] = useState('overview'); // 'overview', 'tasks', 'assignments', 'reviews'
@@ -372,6 +374,23 @@ export const TasksAdminPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/tasks', `jowis-tasks-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                  trackId: taskTrackFilter || undefined,
+                  status: taskStatusFilter || undefined,
+                  search: taskSearch.trim() || undefined
+                });
+              } catch (err) {
+                alert(err.message || 'Failed to export tasks CSV');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-brand-400" />
+            <span>Export Tasks</span>
+          </button>
           <button
             onClick={() => openAssignModal()}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
@@ -890,11 +909,11 @@ export const TasksAdminPage = () => {
                           <span className="text-[10px] text-slate-400">{s.track_name} • Max: {s.max_score} pts</span>
                         </td>
                         <td className="px-5 py-3.5 max-w-xs">
-                          {s.submission_url && (
+                          {s.submission_url && isSafeUrl(s.submission_url) && (
                             <a
-                              href={s.submission_url}
+                              href={s.submission_url.trim()}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="text-brand-400 hover:underline flex items-center gap-1 text-[11px] font-mono truncate mb-1"
                             >
                               <ExternalLink className="w-3 h-3" />
@@ -1346,13 +1365,13 @@ export const TasksAdminPage = () => {
                 </div>
               </div>
 
-              {selectedSubForReview.submission_url && (
+              {selectedSubForReview.submission_url && isSafeUrl(selectedSubForReview.submission_url) && (
                 <div className="pt-1">
                   <span className="text-[10px] uppercase font-bold text-slate-500 block">Repository / Live Prototype:</span>
                   <a
-                    href={selectedSubForReview.submission_url}
+                    href={selectedSubForReview.submission_url.trim()}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="text-brand-400 hover:underline flex items-center gap-1 font-mono text-[11px] mt-0.5"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />

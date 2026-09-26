@@ -21,6 +21,7 @@ import {
   Users,
   GraduationCap
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 
 export const DocumentsPage = () => {
   const { role } = useAuth();
@@ -342,6 +343,22 @@ export const DocumentsPage = () => {
 
         {/* Global Action */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/documents', `jowis-documents-registry-${new Date().toISOString().split('T')[0]}.csv`, {
+                  status: queueStatusFilter !== 'all' ? queueStatusFilter : undefined,
+                  search: searchQuery.trim() || undefined
+                });
+              } catch (err) {
+                setErrorMsg(err.message || 'Failed to export documents CSV.');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-indigo-400" />
+            <span>Export Registry CSV</span>
+          </button>
           {activeTab === 'types' && isAdmin && (
             <button
               onClick={() => setShowCreateTypeModal(true)}

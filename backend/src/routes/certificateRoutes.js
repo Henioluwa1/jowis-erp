@@ -12,6 +12,7 @@ import {
   downloadPublicCertificatePDF
 } from '../controllers/certificateController.js';
 import { authenticateJWT, authorizeRoles } from '../middleware/auth.js';
+import { publicVerifyRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -19,8 +20,8 @@ const router = express.Router();
 // 1. PUBLIC VERIFICATION ENDPOINTS (Gate 15)
 // Unauthenticated & strict privacy protected
 // ==========================================
-router.get('/verify/:verificationCode', verifyPublicCertificate);
-router.get('/verify/:verificationCode/download', downloadPublicCertificatePDF);
+router.get('/verify/:verificationCode', publicVerifyRateLimiter, verifyPublicCertificate);
+router.get('/verify/:verificationCode/download', publicVerifyRateLimiter, downloadPublicCertificatePDF);
 
 // ==========================================
 // 2. CERTIFICATE TYPES MANAGEMENT (Gate 10)

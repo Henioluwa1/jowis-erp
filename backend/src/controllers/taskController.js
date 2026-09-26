@@ -814,6 +814,18 @@ export const submitTaskWork = async (req, res) => {
       });
     }
 
+    // Strict URL validation against XSS payloads (V-01)
+    if (submissionUrl && submissionUrl.trim()) {
+      const cleanUrl = submissionUrl.trim();
+      const urlPattern = /^https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+$/i;
+      if (!urlPattern.test(cleanUrl) || cleanUrl.toLowerCase().startsWith('javascript:') || cleanUrl.toLowerCase().startsWith('data:')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Security Alert: Invalid submission URL. Only valid HTTP and HTTPS project links are accepted.'
+        });
+      }
+    }
+
     const attachmentPath = uploadedFile ? `/uploads/submissions/${uploadedFile.filename}` : null;
 
     // Check existing submission record for attempt counter

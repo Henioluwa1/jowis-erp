@@ -21,8 +21,12 @@ import {
   Calendar,
   RotateCcw,
   Paperclip,
-  Check
+  Check,
+  Download
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
+
+const isSafeUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url.trim());
 
 export const InternTasksPage = () => {
   const [tasks, setTasks] = useState([]);
@@ -205,8 +209,24 @@ export const InternTasksPage = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/tasks', `jowis-my-tasks-${new Date().toISOString().split('T')[0]}.csv`, {
+                  status: selectedStatus !== 'ALL' ? selectedStatus : undefined,
+                  search: searchQuery.trim() || undefined
+                });
+              } catch (err) {
+                alert(err.message || 'Failed to export tasks CSV');
+              }
+            }}
+            className="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+          <button
             onClick={fetchTasks}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Refresh Tasks</span>
@@ -678,13 +698,13 @@ export const InternTasksPage = () => {
             </div>
 
             {/* References */}
-            {selectedTask.reference_url && (
+            {selectedTask.reference_url && isSafeUrl(selectedTask.reference_url) && (
               <div>
                 <h4 className="text-slate-400 uppercase font-bold text-[10px] tracking-wider mb-1">Reference Resources</h4>
                 <a
-                  href={selectedTask.reference_url}
+                  href={selectedTask.reference_url.trim()}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-brand-400 hover:text-brand-300 underline font-medium"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -743,13 +763,13 @@ export const InternTasksPage = () => {
             )}
 
             {/* Submitted Repository URL */}
-            {selectedTask.submission_url && (
+            {selectedTask.submission_url && isSafeUrl(selectedTask.submission_url) && (
               <div>
                 <h4 className="text-slate-400 uppercase font-bold text-[10px] tracking-wider mb-1">Submitted Repository / Link</h4>
                 <a
-                  href={selectedTask.submission_url}
+                  href={selectedTask.submission_url.trim()}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-brand-400 hover:text-brand-300 underline font-mono break-all"
                 >
                   <ExternalLink className="w-3.5 h-3.5 shrink-0" />

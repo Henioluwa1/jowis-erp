@@ -26,8 +26,10 @@ import {
   Info,
   Check,
   Send,
-  Trash2
+  Trash2,
+  FileDown
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 
 export const PerformancePage = () => {
   const { role } = useAuth();
@@ -476,10 +478,30 @@ export const PerformancePage = () => {
 
           <button
             onClick={fetchData}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/performance', `jowis-performance-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                  periodId: filterPeriod !== 'ALL' ? filterPeriod : undefined,
+                  trackId: filterTrack !== 'ALL' ? filterTrack : undefined,
+                  cohortId: filterCohort !== 'ALL' ? filterCohort : undefined,
+                  status: filterStatus !== 'ALL' ? filterStatus : undefined,
+                  search: searchQuery.trim() || undefined
+                });
+              } catch (err) {
+                setErrorMsg(err.message || 'Failed to export performance evaluations.');
+              }
+            }}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <FileDown className="w-3.5 h-3.5 text-brand-400" />
+            <span>Export CSV</span>
           </button>
         </div>
       </div>

@@ -53,7 +53,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const clearPasswordChangeRequirement = () => {
+    if (user) {
+      const updated = { ...user, mustChangePassword: false };
+      setUser(updated);
+      localStorage.setItem('jowis_user', JSON.stringify(updated));
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (e) {
+      // Continue client cleanup even if request fails
+    }
     localStorage.removeItem('jowis_token');
     localStorage.removeItem('jowis_user');
     setToken(null);
@@ -67,9 +80,11 @@ export const AuthProvider = ({ children }) => {
         token,
         role: user?.role || null,
         isAuthenticated: !!user && !!token,
+        mustChangePassword: Boolean(user?.mustChangePassword),
         isLoading,
         login,
-        logout
+        logout,
+        clearPasswordChangeRequirement
       }}
     >
       {children}

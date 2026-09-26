@@ -2,10 +2,14 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/common/Sidebar';
 import { Header } from '../components/common/Header';
+import { FirstLoginModal } from '../components/common/FirstLoginModal';
 
 export const DashboardLayout = () => {
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
+      {/* Forced First-Login Modal Overlay */}
+      <FirstLoginModal />
+
       {/* Sidebar */}
       <Sidebar />
 

@@ -11,11 +11,20 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// Disallowed executable and script extensions
-const DISALLOWED_EXTENSIONS = new Set([
+// Permitted safe deliverable extensions (Whitelisted)
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf', '.zip', '.rar', '.7z', '.tar', '.gz',
+  '.doc', '.docx', '.odt', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.txt', '.csv', '.json', '.md',
+  '.jpg', '.jpeg', '.png', '.webp', '.gif'
+]);
+
+// Strictly blocked dangerous executable & script extensions
+const BLOCKED_EXTENSIONS = new Set([
   '.exe', '.bat', '.cmd', '.sh', '.php', '.phtml', '.php3', '.php4', '.php5',
   '.pl', '.cgi', '.py', '.rb', '.vbs', '.js', '.jar', '.dll', '.com', '.scr',
-  '.msi', '.jsp', '.asp', '.aspx', '.bash', '.ps1', '.elf', '.bin'
+  '.msi', '.jsp', '.asp', '.aspx', '.bash', '.ps1', '.elf', '.bin',
+  '.html', '.htm', '.xhtml', '.svg', '.xml', '.shtml', '.htaccess'
 ]);
 
 const storage = multer.diskStorage({
@@ -37,15 +46,25 @@ const fileFilter = (req, file, cb) => {
   }
 
   const ext = path.extname(file.originalname).toLowerCase();
-  if (DISALLOWED_EXTENSIONS.has(ext)) {
-    return cb(new Error(`Security Alert: File type '${ext}' is not permitted for submissions.`));
+  
+  // 1. Blacklist check
+  if (BLOCKED_EXTENSIONS.has(ext)) {
+    return cb(new Error(`Security Alert: Dangerous file type '${ext}' is strictly forbidden.`));
   }
 
-  // Dangerous MIME type check
+  // 2. Strict Whitelist check
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return cb(new Error(`Security Alert: Unsupported file extension '${ext}'. Allowed types: pdf, zip, docx, xlsx, images, and text/data files.`));
+  }
+
+  // 3. Dangerous MIME type check
   const mime = (file.mimetype || '').toLowerCase();
   if (
     mime.includes('javascript') ||
     mime.includes('php') ||
+    mime.includes('html') ||
+    mime.includes('svg') ||
+    mime.includes('xml') ||
     mime.includes('executable') ||
     mime.includes('x-msdownload') ||
     mime.includes('x-sh')

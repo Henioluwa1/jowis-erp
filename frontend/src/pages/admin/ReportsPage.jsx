@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { downloadCSV } from '../../utils/exportUtil';
 import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
@@ -26,7 +27,10 @@ import {
   Info,
   ChevronLeft,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Cpu,
+  FileCheck,
+  History
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -185,25 +189,12 @@ export const ReportsPage = () => {
       setErrorMsg('');
       setSuccessMsg(`Preparing ${type.toUpperCase()} CSV export...`);
       const params = getFilterParams();
-      const res = await api.get(`/reports/export/${type}`, {
-        params,
-        responseType: 'blob'
-      });
-
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8;' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${type}_report_${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
+      await downloadCSV(`/reports/export/${type}`, `jowis-${type}-report-${new Date().toISOString().split('T')[0]}.csv`, params);
       setSuccessMsg(`Successfully generated and exported ${type.toUpperCase()} report. Action recorded in audit logs.`);
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       console.error('Export error:', err);
-      setErrorMsg('Failed to generate CSV export file.');
+      setErrorMsg(err.message || 'Failed to generate CSV export file.');
     }
   };
 
@@ -251,7 +242,12 @@ export const ReportsPage = () => {
             <span>Print Report</span>
           </button>
           <button
-            onClick={() => handleExport(activeTab === 'attendance' ? 'attendance' : activeTab === 'tasks' ? 'tasks' : activeTab === 'performance' ? 'performance' : 'interns')}
+            onClick={() => {
+              const exportType = ['attendance', 'tasks', 'performance', 'cohorts', 'mentors', 'executive', 'tracks'].includes(activeTab)
+                ? activeTab
+                : 'interns';
+              handleExport(exportType);
+            }}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-brand-600/30 transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
@@ -1061,6 +1057,62 @@ export const ReportsPage = () => {
                     description: 'Aggregated cohort metrics including attendance rates, task completion, and active headcount.',
                     icon: Layers,
                     color: 'amber'
+                  },
+                  {
+                    type: 'tracks',
+                    title: 'Track Utilization & Metrics',
+                    description: 'Comparative track performance, student counts, completion rates, and average scores.',
+                    icon: Layers,
+                    color: 'cyan'
+                  },
+                  {
+                    type: 'mentors',
+                    title: 'Mentor Workload & Capacity',
+                    description: 'Supervised intern volume, lead cohorts, pending reviews, and evaluation turnaround counts.',
+                    icon: Briefcase,
+                    color: 'indigo'
+                  },
+                  {
+                    type: 'executive',
+                    title: 'Executive Management Summary',
+                    description: 'High-level institutional KPI summary across intern roster, attendance, tasks, and evaluations.',
+                    icon: TrendingUp,
+                    color: 'rose'
+                  },
+                  {
+                    type: 'users',
+                    title: 'User Accounts Directory',
+                    description: 'Institutional user directory with assigned roles, account status, and credential metadata.',
+                    icon: Users,
+                    color: 'blue'
+                  },
+                  {
+                    type: 'audit_logs',
+                    title: 'Immutable Audit Trail',
+                    description: 'Comprehensive historical audit record with actors, entity changes, timestamps, and justification.',
+                    icon: History,
+                    color: 'slate'
+                  },
+                  {
+                    type: 'automation',
+                    title: 'Automation Execution Logs',
+                    description: 'System automation rule triggers, processing statuses, execution duration, and audit outputs.',
+                    icon: Cpu,
+                    color: 'emerald'
+                  },
+                  {
+                    type: 'certificates',
+                    title: 'Credential & Certificate Registry',
+                    description: 'Authoritative registry of issued credentials, certificate numbers, verification hashes, and statuses.',
+                    icon: Award,
+                    color: 'amber'
+                  },
+                  {
+                    type: 'documents',
+                    title: 'Compliance Document Registry',
+                    description: 'Verification queue records, file types, verification status, and reviewer determinations.',
+                    icon: FileCheck,
+                    color: 'indigo'
                   }
                 ].map((item) => {
                   const Icon = item.icon;

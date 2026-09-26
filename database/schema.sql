@@ -28,6 +28,7 @@ CREATE TABLE `users` (
   `phone` VARCHAR(30) NULL,
   `avatar_url` VARCHAR(255) NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
   `deactivation_reason` VARCHAR(255) NULL,
   `last_login` DATETIME NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

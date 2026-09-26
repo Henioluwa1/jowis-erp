@@ -8,8 +8,11 @@ import {
   Clock,
   AlertTriangle,
   TrendingUp,
-  BarChart2
+  BarChart2,
+  Download,
+  Printer
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 import {
   ResponsiveContainer,
   BarChart,
@@ -62,14 +65,39 @@ export const InternAttendancePage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-          <CalendarCheck className="w-6 h-6 text-brand-400" />
-          <span>My Attendance & Punctuality Analysis</span>
-        </h2>
-        <p className="text-xs text-slate-400 mt-1">
-          Detailed breakdown of your session attendance, punctuality rating, and historical records.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <CalendarCheck className="w-6 h-6 text-brand-400" />
+            <span>My Attendance & Punctuality Analysis</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-1">
+            Detailed breakdown of your session attendance, punctuality rating, and historical records.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium rounded-lg transition-all cursor-pointer"
+            title="Print / Save PDF"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Report</span>
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/attendance', `jowis-my-attendance-${new Date().toISOString().split('T')[0]}.csv`);
+              } catch (err) {
+                alert(err.message || 'Failed to export attendance CSV');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}

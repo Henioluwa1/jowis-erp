@@ -17,8 +17,10 @@ import {
   CheckCircle2,
   Layers,
   Clock,
-  Trash2
+  Trash2,
+  FileDown
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 
 export const TrainingPage = () => {
   const [activeTab, setActiveTab] = useState('tracks'); // 'tracks', 'cohorts', or 'modules'
@@ -391,6 +393,30 @@ export const TrainingPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                if (activeTab === 'cohorts') {
+                  await downloadCSV('/reports/export/cohorts', `jowis-cohorts-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                    trackId: cohortTrackFilter || undefined,
+                    status: cohortStatusFilter || undefined,
+                    search: cohortSearch.trim() || undefined
+                  });
+                } else {
+                  await downloadCSV('/reports/export/tracks', `jowis-tracks-report-${new Date().toISOString().split('T')[0]}.csv`, {
+                    status: trackStatusFilter || undefined,
+                    search: trackSearch.trim() || undefined
+                  });
+                }
+              } catch (err) {
+                alert(err.message || 'Failed to export training report');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <FileDown className="w-4 h-4 text-brand-400" />
+            <span>Export {activeTab === 'cohorts' ? 'Cohorts' : 'Tracks'} CSV</span>
+          </button>
           {activeTab === 'tracks' ? (
             <button
               onClick={openCreateTrack}

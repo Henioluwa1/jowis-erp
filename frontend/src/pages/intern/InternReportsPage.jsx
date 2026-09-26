@@ -10,8 +10,10 @@ import {
   Info,
   RefreshCw,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
+import { downloadCSV } from '../../utils/exportUtil';
 
 export const InternReportsPage = () => {
   const [loading, setLoading] = useState(true);
@@ -51,13 +53,36 @@ export const InternReportsPage = () => {
           </p>
         </div>
 
-        <button
-          onClick={fetchScorecard}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium rounded-lg transition-all self-start cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Scorecard</span>
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium rounded-lg transition-all cursor-pointer"
+            title="Print / Save PDF"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Report</span>
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await downloadCSV('/reports/export/personal_scorecard', `jowis-personal-scorecard-${new Date().toISOString().split('T')[0]}.csv`);
+              } catch (err) {
+                setErrorMsg(err.message || 'Failed to export career scorecard.');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Scorecard CSV</span>
+          </button>
+          <button
+            onClick={fetchScorecard}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium rounded-lg transition-all cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {errorMsg && (

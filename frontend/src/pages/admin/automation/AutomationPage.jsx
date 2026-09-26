@@ -25,8 +25,10 @@ import {
   Check,
   Calendar,
   Layers,
-  ArrowRight
+  ArrowRight,
+  FileDown
 } from 'lucide-react';
+import { downloadCSV } from '../../../utils/exportUtil';
 import { Link } from 'react-router-dom';
 
 export const AutomationPage = () => {
@@ -531,13 +533,30 @@ export const AutomationPage = () => {
               </div>
             </div>
 
-            <button
-              onClick={() => fetchExecutions(1)}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all flex items-center gap-1.5 self-end"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>Apply Filters</span>
-            </button>
+            <div className="flex items-center gap-2 self-end">
+              <button
+                onClick={async () => {
+                  try {
+                    await downloadCSV('/reports/export/automation', `jowis-automation-logs-${new Date().toISOString().split('T')[0]}.csv`, {
+                      status: execStatusFilter !== 'all' ? execStatusFilter : undefined
+                    });
+                  } catch (err) {
+                    setFeedback({ type: 'error', text: err.message || 'Failed to export automation logs CSV.' });
+                  }
+                }}
+                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Export Logs CSV</span>
+              </button>
+              <button
+                onClick={() => fetchExecutions(1)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Apply Filters</span>
+              </button>
+            </div>
           </div>
 
           {/* Execution Table */}
