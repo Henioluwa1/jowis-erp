@@ -85,7 +85,29 @@ export async function restoreDatabase(options = {}) {
     await connection.query(`USE \`${database}\`;`);
 
     const sqlContent = fs.readFileSync(filePath, 'utf-8');
-    await connection.query(sqlContent);
+    
+    // Parse statements delimited by semicolons at line boundaries
+    const statements = [];
+    let currentStmt = '';
+    const lines = sqlContent.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('--')) continue;
+      currentStmt += line + '\n';
+      if (trimmed.endsWith(';')) {
+        statements.push(currentStmt.trim());
+        currentStmt = '';
+      }
+    }
+    if (currentStmt.trim()) {
+      statements.push(currentStmt.trim());
+    }
+
+    for (const stmt of statements) {
+      if (stmt) {
+        await connection.query(stmt);
+      }
+    }
 
     // Verify tables count
     const [tableRows] = await connection.query(`SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'`);

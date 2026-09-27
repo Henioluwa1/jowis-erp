@@ -12,8 +12,13 @@ import {
   BookOpen,
   Bell,
   Check,
-  Loader2
+  Loader2,
+  Calendar,
+  Lock,
+  ShieldCheck,
+  CalendarOff
 } from 'lucide-react';
+import { ScheduleSetupModal } from '../../components/common/ScheduleSetupModal';
 
 export const InternDashboard = () => {
   const [data, setData] = useState(null);
@@ -21,6 +26,7 @@ export const InternDashboard = () => {
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInMessage, setCheckInMessage] = useState(null);
   const [checkInError, setCheckInError] = useState('');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const fetchInternDashboard = async () => {
     try {
@@ -102,6 +108,44 @@ export const InternDashboard = () => {
         </div>
       </div>
 
+      {/* Schedule Status Banner */}
+      {!profile.scheduleLocked ? (
+        <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-amber-300">Attendance Schedule Not Configured</p>
+              <p className="text-xs text-amber-400/80">
+                Institutional policy requires you to select your permanent 3-day attendance schedule (Monday + 2 additional days).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowScheduleModal(true)}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow transition-colors shrink-0"
+          >
+            Configure Schedule
+          </button>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-emerald-400" />
+            <span className="font-semibold text-slate-300">Your Locked 3-Day Schedule:</span>
+            <div className="flex items-center gap-1.5">
+              {profile.scheduleDays?.map(d => (
+                <span key={d} className="px-2 py-0.5 rounded bg-brand-500/20 text-brand-300 border border-brand-500/40 uppercase font-mono font-bold text-[11px]">
+                  {d}
+                </span>
+              ))}
+            </div>
+          </div>
+          <span className="text-[11px] text-slate-400 italic">
+            * Monday is compulsory. Non-scheduled days are excluded from attendance rate denominator.
+          </span>
+        </div>
+      )}
+
       {/* TODAY'S ATTENDANCE CHECK-IN WIDGET (CRITICAL UX REQUIREMENT) */}
       <div className="erp-card p-6 border-slate-800 bg-slate-900/90 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
@@ -175,8 +219,46 @@ export const InternDashboard = () => {
                 Single daily check-in verified.
               </div>
             </div>
+          ) : !profile.scheduleLocked ? (
+            /* Not locked schedule */
+            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Schedule Setup Required</p>
+                <p className="text-sm font-bold text-white mt-0.5">Please configure your 3-day schedule first.</p>
+                <p className="text-xs text-slate-400 mt-0.5">You must choose your 2 additional working days before marking attendance.</p>
+              </div>
+              <button
+                onClick={() => setShowScheduleModal(true)}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow transition-colors"
+              >
+                Set Schedule Now
+              </button>
+            </div>
+          ) : todayAttendance.isScheduledToday === false ? (
+            /* Non-scheduled day */
+            <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-slate-900 text-slate-400 border border-slate-800 flex items-center justify-center shrink-0">
+                  <CalendarOff className="w-6 h-6 text-slate-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Non-Scheduled Attendance Day</p>
+                  <p className="text-base font-bold text-slate-200 mt-0.5">
+                    No check-in required today ({todayAttendance.date}).
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Your active attendance days are: <strong className="text-white">{profile.scheduleDays?.map(d => d.toUpperCase()).join(', ')}</strong>. Today is excluded from absence calculations.
+                  </p>
+                </div>
+              </div>
+              <div className="sm:self-center shrink-0">
+                <span className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-slate-300 border border-slate-800">
+                  Off-Schedule Day
+                </span>
+              </div>
+            </div>
           ) : (
-            /* Not yet checked in */
+            /* Scheduled day - Not yet checked in */
             <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Attendance Status</p>
@@ -307,6 +389,13 @@ export const InternDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Schedule Setup Modal */}
+      <ScheduleSetupModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onScheduleSaved={() => fetchInternDashboard()}
+      />
     </div>
   );
 };

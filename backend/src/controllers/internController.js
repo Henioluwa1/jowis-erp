@@ -4,6 +4,7 @@ import { recordAuditLog } from '../middleware/audit.js';
 import { getLagosDate } from '../utils/timezone.js';
 import { generateSecureTemporaryPassword } from '../utils/passwordGenerator.js';
 import notificationService from '../services/notificationService.js';
+import { parseScheduleDays } from '../utils/scheduleHelper.js';
 
 // 9 Permitted lifecycle statuses
 export const ALLOWED_LIFECYCLE_STATUSES = [
@@ -76,6 +77,7 @@ export const getAllInterns = async (req, res) => {
 
     const interns = await query(`
       SELECT ip.id, ip.intern_code, ip.status, ip.start_date, ip.expected_end_date, ip.actual_end_date, ip.phone,
+             ip.schedule_days, ip.schedule_locked,
              u.id as user_id, u.first_name, u.last_name, u.email, u.avatar_url, u.is_active as user_active,
              t.id as track_id, t.name as track_name, t.code as track_code,
              c.id as cohort_id, c.name as cohort_name, c.cohort_code, c.status as cohort_status,
@@ -91,6 +93,12 @@ export const getAllInterns = async (req, res) => {
       LIMIT ? OFFSET ?
     `, [...params, parseInt(limit, 10), offset]);
 
+    const formattedInterns = interns.map(i => ({
+      ...i,
+      schedule_days: parseScheduleDays(i.schedule_days) || [],
+      schedule_locked: Boolean(i.schedule_locked)
+    }));
+
     const [countResult] = await query(`
       SELECT COUNT(*) as count
       FROM intern_profiles ip
@@ -101,7 +109,7 @@ export const getAllInterns = async (req, res) => {
 
     res.json({
       success: true,
-      data: interns,
+      data: formattedInterns,
       pagination: {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),
@@ -206,6 +214,9 @@ export const getInternById = async (req, res) => {
       WHERE ts.intern_id = ?
       ORDER BY ts.submitted_at DESC
     `, [requestedId]);
+
+    intern.schedule_days = parseScheduleDays(intern.schedule_days) || [];
+    intern.schedule_locked = Boolean(intern.schedule_locked);
 
     res.json({
       success: true,

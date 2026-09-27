@@ -1,6 +1,15 @@
 import { query } from '../config/db.js';
 import { getLagosDate, evaluateAttendance, calculateExpectedWorkingDays, isWorkingDay } from '../utils/timezone.js';
 import { recordAuditLog } from '../middleware/audit.js';
+import {
+  validateSchedule,
+  parseScheduleDays,
+  getWorkingDaysConfig,
+  isScheduledDay,
+  COMPULSORY_DAY,
+  VALID_OPTIONAL_DAYS
+} from '../utils/scheduleHelper.js';
+import { createNotification } from '../services/notificationService.js';
 
 /**
  * Intern self check-in endpoint
@@ -19,6 +28,21 @@ export const checkIn = async (req, res) => {
 
     // Authoritative server timestamp in Africa/Lagos timezone
     const { date, time } = getLagosDate();
+
+    // Check intern schedule if configured
+    const [internProf] = await query('SELECT schedule_days, schedule_locked FROM intern_profiles WHERE id = ?', [internProfileId]);
+    const scheduleDays = parseScheduleDays(internProf?.schedule_days);
+
+    if (scheduleDays && scheduleDays.length === 3) {
+      if (!isScheduledDay(date, scheduleDays)) {
+        const [y, m, d] = date.split('-').map(Number);
+        const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+        return res.status(400).json({
+          success: false,
+          message: `Today (${dayName}) is not one of your scheduled attendance days (${scheduleDays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}). Attendance check-in is only expected on scheduled working days.`
+        });
+      }
+    }
 
     // 1. Check if already checked in today
     const existing = await query(
@@ -150,6 +174,119 @@ export const getMyAttendance = async (req, res) => {
 };
 
 /**
+ * Intern / Admin: Get attendance schedule
+ */
+export const getMySchedule = async (req, res) => {
+  try {
+    const internProfileId = req.user.internProfileId || req.query.internId;
+    if (!internProfileId) {
+      return res.status(400).json({ success: false, message: 'Intern profile ID not found.' });
+    }
+
+    const [intern] = await query(
+      'SELECT id, intern_code, schedule_days, schedule_locked FROM intern_profiles WHERE id = ?',
+      [internProfileId]
+    );
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern profile not found.' });
+    }
+
+    const scheduleDays = parseScheduleDays(intern.schedule_days);
+
+    res.json({
+      success: true,
+      data: {
+        internId: intern.id,
+        internCode: intern.intern_code,
+        scheduleDays: scheduleDays || [],
+        scheduleLocked: Boolean(intern.schedule_locked),
+        locked: Boolean(intern.schedule_locked),
+        compulsoryDay: COMPULSORY_DAY,
+        validOptionalDays: VALID_OPTIONAL_DAYS
+      }
+    });
+  } catch (err) {
+    console.error('getMySchedule error:', err);
+    res.status(500).json({ success: false, message: 'Failed to retrieve attendance schedule.' });
+  }
+};
+
+/**
+ * Intern: Set permanent 3-day attendance schedule
+ * CRITICAL BUSINESS RULES:
+ * 1. Monday is compulsory.
+ * 2. Exactly 2 additional days chosen from {tuesday, wednesday, thursday, friday}.
+ * 3. Total schedule is exactly 3 days.
+ * 4. Once submitted, schedule becomes permanently locked.
+ */
+export const setMySchedule = async (req, res) => {
+  try {
+    const internProfileId = req.user.internProfileId;
+    if (!internProfileId) {
+      return res.status(403).json({ success: false, message: 'Only registered interns can configure their attendance schedule.' });
+    }
+
+    const [intern] = await query(
+      'SELECT id, intern_code, schedule_days, schedule_locked FROM intern_profiles WHERE id = ?',
+      [internProfileId]
+    );
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern profile not found.' });
+    }
+
+    if (intern.schedule_locked) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attendance schedule is permanently locked and cannot be changed.'
+      });
+    }
+
+    const { days } = req.body;
+    const canonicalDays = validateSchedule(days);
+
+    await query(
+      'UPDATE intern_profiles SET schedule_days = ?, schedule_locked = 1 WHERE id = ?',
+      [JSON.stringify(canonicalDays), internProfileId]
+    );
+
+    await recordAuditLog(
+      req.user.id,
+      'SET_ATTENDANCE_SCHEDULE',
+      'intern_profiles',
+      internProfileId,
+      { schedule_days: intern.schedule_days, schedule_locked: intern.schedule_locked },
+      { schedule_days: canonicalDays, schedule_locked: 1 },
+      req,
+      `Attendance schedule permanently configured and locked: ${canonicalDays.join(', ')}`
+    );
+
+    await createNotification({
+      userId: req.user.id,
+      type: 'attendance',
+      title: 'Attendance Schedule Confirmed',
+      message: `Your permanent 3-day attendance schedule has been configured and locked: ${canonicalDays.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}.`,
+      relatedEntityType: 'intern_profiles',
+      relatedEntityId: internProfileId,
+      link: '/intern/attendance'
+    });
+
+    res.json({
+      success: true,
+      message: 'Attendance schedule successfully configured and permanently locked.',
+      data: {
+        scheduleDays: canonicalDays,
+        scheduleLocked: true
+      }
+    });
+  } catch (err) {
+    console.error('setMySchedule error:', err);
+    res.status(400).json({ success: false, message: err.message || 'Failed to configure attendance schedule.' });
+  }
+};
+
+/**
  * Get logged-in intern's comprehensive attendance summary & analytical rates
  * Calculated against Expected Working Days (excluding weekends and approved holidays).
  */
@@ -162,20 +299,25 @@ export const getMyAttendanceSummary = async (req, res) => {
 
     const { date } = getLagosDate();
 
-    // Fetch intern start date
+    // Fetch intern profile details including schedule
     const [internProfile] = await query(
-      `SELECT start_date FROM intern_profiles WHERE id = ?`,
+      `SELECT start_date, schedule_days, schedule_locked FROM intern_profiles WHERE id = ?`,
       [internProfileId]
     );
     const startDate = internProfile?.start_date || '2026-02-01';
+    const scheduleDays = parseScheduleDays(internProfile?.schedule_days);
 
-    // Fetch working days configuration
-    const [wdSetting] = await query(
-      `SELECT setting_value FROM system_settings WHERE setting_key = 'working_days'`
-    );
+    // Fetch working days configuration: prioritize intern's 3-day schedule
     let workingDaysConfig = null;
-    if (wdSetting?.setting_value) {
-      try { workingDaysConfig = JSON.parse(wdSetting.setting_value); } catch (e) {}
+    if (scheduleDays && scheduleDays.length === 3) {
+      workingDaysConfig = getWorkingDaysConfig(scheduleDays);
+    } else {
+      const [wdSetting] = await query(
+        `SELECT setting_value FROM system_settings WHERE setting_key = 'working_days'`
+      );
+      if (wdSetting?.setting_value) {
+        try { workingDaysConfig = JSON.parse(wdSetting.setting_value); } catch (e) {}
+      }
     }
 
     // Fetch active company holidays
@@ -327,11 +469,13 @@ export const getAdminTodayOverview = async (req, res) => {
   try {
     const { date } = getLagosDate();
 
-    // Total active interns in system
-    const [internStats] = await query(
-      `SELECT COUNT(*) as total_active FROM intern_profiles WHERE status = 'active'`
+    // Total active interns and those scheduled for today
+    const activeInterns = await query(
+      `SELECT id, schedule_days FROM intern_profiles WHERE status = 'active'`
     );
-    const totalActive = parseInt(internStats.total_active || 0, 10);
+    const totalActive = activeInterns.length;
+    const scheduledToday = activeInterns.filter(i => isScheduledDay(date, i.schedule_days)).length;
+    const expectedToday = scheduledToday > 0 ? scheduledToday : totalActive;
 
     // Today's attendance counts
     const [todayCounts] = await query(
@@ -352,14 +496,15 @@ export const getAdminTodayOverview = async (req, res) => {
     const late = parseInt(todayCounts.late_count || 0, 10);
     const absent = parseInt(todayCounts.absent_count || 0, 10);
     const excused = parseInt(todayCounts.excused_count || 0, 10);
-    const notMarked = Math.max(0, totalActive - marked);
-    const attendanceRate = totalActive > 0 ? Math.round(((present + late) / totalActive) * 100) : 0;
+    const notMarked = Math.max(0, expectedToday - marked);
+    const attendanceRate = expectedToday > 0 ? Math.min(100, Math.round(((present + late) / expectedToday) * 100)) : 100;
 
     res.json({
       success: true,
       data: {
         todayDate: date,
         totalActiveInterns: totalActive,
+        scheduledTodayCount: scheduledToday,
         presentCount: present,
         lateCount: late,
         absentCount: absent,
@@ -437,7 +582,7 @@ export const getAdminAttendanceRegister = async (req, res) => {
     const records = await query(
       `SELECT a.id, a.intern_id, a.attendance_date, a.check_in_time, a.check_out_time, a.status, a.late_minutes, a.notes,
               u.first_name, u.last_name, u.email, u.avatar_url,
-              ip.intern_code,
+              ip.intern_code, ip.schedule_days, ip.schedule_locked,
               t.name as track_name,
               c.name as cohort_name,
               mu.first_name as marked_by_first, mu.last_name as marked_by_last
@@ -462,9 +607,15 @@ export const getAdminAttendanceRegister = async (req, res) => {
       params
     );
 
+    const formattedRecords = records.map(r => ({
+      ...r,
+      schedule_days: parseScheduleDays(r.schedule_days) || [],
+      schedule_locked: Boolean(r.schedule_locked)
+    }));
+
     res.json({
       success: true,
-      data: records,
+      data: formattedRecords,
       pagination: {
         page: parseInt(page, 10),
         limit: parseInt(limit, 10),

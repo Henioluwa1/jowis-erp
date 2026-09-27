@@ -1,5 +1,6 @@
 import { query } from '../config/db.js';
 import { getLagosDate, calculateExpectedWorkingDays } from '../utils/timezone.js';
+import { parseScheduleDays, getWorkingDaysConfig, isScheduledDay } from '../utils/scheduleHelper.js';
 
 export const getAdminDashboard = async (req, res) => {
   try {
@@ -150,12 +151,17 @@ export const getInternDashboard = async (req, res) => {
     `, [internProfileId, date]);
 
     // 3. Authoritative Working Days & Holidays Configuration
-    const [wdSetting] = await query(
-      `SELECT setting_value FROM system_settings WHERE setting_key = 'working_days'`
-    );
     let workingDaysConfig = null;
-    if (wdSetting?.setting_value) {
-      try { workingDaysConfig = JSON.parse(wdSetting.setting_value); } catch (e) {}
+    const internSchedule = parseScheduleDays(profile?.schedule_days);
+    if (internSchedule && internSchedule.length === 3) {
+      workingDaysConfig = getWorkingDaysConfig(internSchedule);
+    } else {
+      const [wdSetting] = await query(
+        `SELECT setting_value FROM system_settings WHERE setting_key = 'working_days'`
+      );
+      if (wdSetting?.setting_value) {
+        try { workingDaysConfig = JSON.parse(wdSetting.setting_value); } catch (e) {}
+      }
     }
     const holidayRows = await query(`SELECT holiday_date FROM company_holidays WHERE is_active = 1`);
     const holidaySet = new Set(holidayRows.map(h => h.holiday_date));
@@ -230,10 +236,13 @@ export const getInternDashboard = async (req, res) => {
           cohort: profile.cohort_name,
           mentor: profile.mentor_first ? `${profile.mentor_first} ${profile.mentor_last}` : 'Lead Instructor',
           status: profile.status,
-          avatarUrl: profile.avatar_url
+          avatarUrl: profile.avatar_url,
+          scheduleDays: internSchedule || [],
+          scheduleLocked: Boolean(profile.schedule_locked)
         },
         todayAttendance: {
           date,
+          isScheduledToday: internSchedule && internSchedule.length === 3 ? isScheduledDay(date, internSchedule) : true,
           isCheckedIn: !!todayAttendance,
           record: todayAttendance || null
         },

@@ -1113,6 +1113,20 @@ export const ReportsPage = () => {
                     description: 'Verification queue records, file types, verification status, and reviewer determinations.',
                     icon: FileCheck,
                     color: 'indigo'
+                  },
+                  {
+                    type: 'document_types',
+                    title: 'Document Types Configuration',
+                    description: 'Configured institutional document schemas, requirements, category mappings, and file size limits.',
+                    icon: FileCheck,
+                    color: 'cyan'
+                  },
+                  {
+                    type: 'permissions',
+                    title: 'Intern Permission & Absence Requests',
+                    description: 'Official requests, affected scheduled working days, mentor evaluations, and final admin review decisions.',
+                    icon: Calendar,
+                    color: 'amber'
                   }
                 ].map((item) => {
                   const Icon = item.icon;

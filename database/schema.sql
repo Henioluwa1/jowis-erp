@@ -109,6 +109,8 @@ CREATE TABLE `intern_profiles` (
   `expected_end_date` DATE NOT NULL,
   `actual_end_date` DATE NULL,
   `notes` TEXT NULL,
+  `schedule_days` JSON NULL DEFAULT NULL,
+  `schedule_locked` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `fk_intern_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -230,6 +232,38 @@ CREATE TABLE `company_holidays` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_holiday_date` (`holiday_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9B_2. PERMISSION REQUESTS & EXCUSED ABSENCE WORKFLOW
+DROP TABLE IF EXISTS `permission_requests`;
+CREATE TABLE `permission_requests` (
+  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `intern_id` INT UNSIGNED NOT NULL,
+  `request_code` VARCHAR(50) NOT NULL UNIQUE,
+  `request_type` VARCHAR(50) NOT NULL DEFAULT 'absence',
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `affected_days_count` INT UNSIGNED NOT NULL DEFAULT 0,
+  `affected_dates` JSON NOT NULL,
+  `reason` VARCHAR(255) NOT NULL,
+  `message` TEXT NULL,
+  `status` ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED') NOT NULL DEFAULT 'PENDING',
+  `mentor_review_status` ENUM('PENDING', 'APPROVED', 'REJECTED', 'RECOMMENDED') NOT NULL DEFAULT 'PENDING',
+  `mentor_review_notes` TEXT NULL,
+  `reviewed_by_mentor_id` INT UNSIGNED NULL,
+  `mentor_reviewed_at` DATETIME NULL,
+  `final_review_status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+  `final_review_notes` TEXT NULL,
+  `reviewed_by_user_id` INT UNSIGNED NULL,
+  `final_reviewed_at` DATETIME NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_perm_intern` FOREIGN KEY (`intern_id`) REFERENCES `intern_profiles` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_perm_mentor` FOREIGN KEY (`reviewed_by_mentor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_perm_reviewer` FOREIGN KEY (`reviewed_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  INDEX `idx_perm_intern` (`intern_id`),
+  INDEX `idx_perm_status` (`status`),
+  INDEX `idx_perm_dates` (`start_date`, `end_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 9C. TRAINING MODULES (Curriculum units within tracks)

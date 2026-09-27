@@ -1310,7 +1310,7 @@ export const exportReportCSV = async (req, res) => {
 
         records = await query(`
           SELECT a.attendance_date, a.check_in_time, a.status, a.late_minutes, a.notes,
-                 ip.intern_code, u.first_name, u.last_name, u.email,
+                 ip.intern_code, ip.schedule_days, u.first_name, u.last_name, u.email,
                  t.name as track_name, c.name as cohort_name
           FROM attendance a
           JOIN intern_profiles ip ON a.intern_id = ip.id
@@ -1321,6 +1321,20 @@ export const exportReportCSV = async (req, res) => {
           ORDER BY a.attendance_date DESC, u.last_name ASC
         `, params);
 
+        records = records.map(r => {
+          let scheduleStr = 'Not Configured';
+          try {
+            const parsed = typeof r.schedule_days === 'string' ? JSON.parse(r.schedule_days) : r.schedule_days;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              scheduleStr = parsed.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+            }
+          } catch {}
+          return {
+            ...r,
+            schedule_label: scheduleStr
+          };
+        });
+
         headers = [
           { key: 'attendance_date', label: 'Date' },
           { key: 'intern_code', label: 'Intern Code' },
@@ -1329,6 +1343,7 @@ export const exportReportCSV = async (req, res) => {
           { key: 'email', label: 'Email' },
           { key: 'track_name', label: 'Track' },
           { key: 'cohort_name', label: 'Cohort' },
+          { key: 'schedule_label', label: 'Schedule Days' },
           { key: 'check_in_time', label: 'Check-In' },
           { key: 'status', label: 'Status' },
           { key: 'late_minutes', label: 'Late Minutes' },
@@ -1855,6 +1870,101 @@ export const exportReportCSV = async (req, res) => {
           { key: 'status', label: 'Status' },
           { key: 'expiry_date', label: 'Expiry Date' },
           { key: 'created_at', label: 'Uploaded At' }
+        ];
+        break;
+      }
+
+      case 'document_types': {
+        records = await query(`
+          SELECT dt.id, dt.name, dt.code, dt.category, dt.description,
+                 dt.is_required, dt.allowed_file_types, dt.max_file_size, dt.status,
+                 (SELECT COUNT(*) FROM intern_documents WHERE document_type_id = dt.id) as total_documents
+          FROM document_types dt
+          ORDER BY dt.id ASC
+        `);
+        records = records.map(r => ({
+          ...r,
+          required_label: r.is_required === 1 ? 'Mandatory' : 'Optional',
+          max_size_mb: (r.max_file_size / (1024 * 1024)).toFixed(1) + ' MB'
+        }));
+        headers = [
+          { key: 'code', label: 'Type Code' },
+          { key: 'name', label: 'Document Type Name' },
+          { key: 'category', label: 'Category' },
+          { key: 'required_label', label: 'Requirement' },
+          { key: 'allowed_file_types', label: 'Allowed Extensions' },
+          { key: 'max_size_mb', label: 'Max File Size' },
+          { key: 'total_documents', label: 'Total Submissions' },
+          { key: 'status', label: 'Status' }
+        ];
+        break;
+      }
+
+      case 'permissions':
+      case 'permission_requests': {
+        let conds = [];
+        let params = [];
+        if (startDate) { conds.push('pr.end_date >= ?'); params.push(startDate); }
+        if (endDate) { conds.push('pr.start_date <= ?'); params.push(endDate); }
+        if (trackId && trackId !== 'ALL') { conds.push('ip.track_id = ?'); params.push(trackId); }
+        if (cohortId && cohortId !== 'ALL') { conds.push('ip.cohort_id = ?'); params.push(cohortId); }
+        if (req.query.status && req.query.status !== 'ALL') { conds.push('pr.status = ?'); params.push(req.query.status.toUpperCase()); }
+
+        // RBAC Isolation
+        if (req.user.role === 'intern') {
+          conds.push('pr.intern_id = ?');
+          params.push(req.user.internProfileId);
+        } else if (req.user.role === 'mentor') {
+          conds.push('(ip.mentor_id = ? OR c.lead_mentor_id = ?)');
+          params.push(req.user.mentorId, req.user.mentorId);
+        }
+
+        const where = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
+
+        records = await query(`
+          SELECT pr.request_code, pr.request_type, pr.start_date, pr.end_date,
+                 pr.affected_days_count, pr.reason, pr.status,
+                 pr.mentor_review_status, pr.final_review_status, pr.created_at,
+                 ip.intern_code, ip.schedule_days,
+                 u.first_name, u.last_name, u.email,
+                 t.name as track_name, c.name as cohort_name
+          FROM permission_requests pr
+          JOIN intern_profiles ip ON pr.intern_id = ip.id
+          JOIN users u ON ip.user_id = u.id
+          JOIN tracks t ON ip.track_id = t.id
+          JOIN cohorts c ON ip.cohort_id = c.id
+          ${where}
+          ORDER BY pr.id DESC
+        `, params);
+
+        records = records.map(r => {
+          let scheduleStr = 'Unset';
+          try {
+            const parsed = typeof r.schedule_days === 'string' ? JSON.parse(r.schedule_days) : r.schedule_days;
+            if (Array.isArray(parsed)) scheduleStr = parsed.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ');
+          } catch {}
+          return {
+            ...r,
+            schedule_label: scheduleStr
+          };
+        });
+
+        headers = [
+          { key: 'request_code', label: 'Request Code' },
+          { key: 'intern_code', label: 'Intern Code' },
+          { key: 'first_name', label: 'First Name' },
+          { key: 'last_name', label: 'Last Name' },
+          { key: 'email', label: 'Email' },
+          { key: 'track_name', label: 'Track' },
+          { key: 'cohort_name', label: 'Cohort' },
+          { key: 'schedule_label', label: 'Attendance Schedule' },
+          { key: 'start_date', label: 'Start Date' },
+          { key: 'end_date', label: 'End Date' },
+          { key: 'affected_days_count', label: 'Affected Working Days' },
+          { key: 'reason', label: 'Reason' },
+          { key: 'mentor_review_status', label: 'Mentor Review' },
+          { key: 'status', label: 'Final Status' },
+          { key: 'created_at', label: 'Submitted At' }
         ];
         break;
       }

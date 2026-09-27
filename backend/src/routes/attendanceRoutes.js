@@ -4,6 +4,8 @@ import {
   getMyAttendance,
   getMyAttendanceSummary,
   getMyAttendanceAnalytics,
+  getMySchedule,
+  setMySchedule,
   getAdminTodayOverview,
   getAdminAttendanceRegister,
   manualMarkOrCorrect,
@@ -22,6 +24,8 @@ router.post('/check-in', authenticateJWT, checkIn);
 router.get('/me', authenticateJWT, getMyAttendance);
 router.get('/me/summary', authenticateJWT, getMyAttendanceSummary);
 router.get('/me/analytics', authenticateJWT, getMyAttendanceAnalytics);
+router.get('/schedule', authenticateJWT, getMySchedule);
+router.post('/schedule', authenticateJWT, authorizeRoles('intern'), setMySchedule);
 
 // Company Holidays (read-accessible to all authenticated, write-restricted to admins)
 router.get('/holidays', authenticateJWT, getCompanyHolidays);

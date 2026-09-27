@@ -346,18 +346,22 @@ export const DocumentsPage = () => {
           <button
             onClick={async () => {
               try {
-                await downloadCSV('/reports/export/documents', `jowis-documents-registry-${new Date().toISOString().split('T')[0]}.csv`, {
-                  status: queueStatusFilter !== 'all' ? queueStatusFilter : undefined,
-                  search: searchQuery.trim() || undefined
-                });
+                if (activeTab === 'types') {
+                  await downloadCSV('/reports/export/document_types', `jowis-document-types-${new Date().toISOString().split('T')[0]}.csv`);
+                } else {
+                  await downloadCSV('/reports/export/documents', `jowis-documents-registry-${new Date().toISOString().split('T')[0]}.csv`, {
+                    status: queueStatusFilter !== 'all' ? queueStatusFilter : undefined,
+                    search: searchQuery.trim() || undefined
+                  });
+                }
               } catch (err) {
-                setErrorMsg(err.message || 'Failed to export documents CSV.');
+                setErrorMsg(err.message || 'Failed to export CSV.');
               }
             }}
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
           >
             <Download className="w-4 h-4 text-indigo-400" />
-            <span>Export Registry CSV</span>
+            <span>{activeTab === 'types' ? 'Export Doc Types CSV' : 'Export Registry CSV'}</span>
           </button>
           {activeTab === 'types' && isAdmin && (
             <button

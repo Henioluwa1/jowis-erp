@@ -19,6 +19,7 @@ import documentRoutes from './routes/documentRoutes.js';
 import certificateRoutes from './routes/certificateRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import automationRoutes from './routes/automationRoutes.js';
+import permissionRoutes from './routes/permissionRoutes.js';
 
 const app = express();
 
@@ -124,6 +125,7 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/automation', automationRoutes);
+app.use('/api/permissions', permissionRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {

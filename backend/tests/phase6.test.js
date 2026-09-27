@@ -241,7 +241,7 @@ async function runPhase6Tests() {
     console.log('\n🔹 GATE 6: Document Versioning & History...');
 
     // Intern 1 uploads updated version (v2) of the same document type
-    const blob2 = new Blob(['%PDF-1.4\nUpdated National ID scan version 2'], { type: 'application/pdf' });
+    const blob2 = new Blob(['%PDF-1.4\n1 0 obj\n<< /Title (Updated National ID) >>\nendobj\ntrailer\n<< >>\n%%EOF'], { type: 'application/pdf' });
     const formData2 = new FormData();
     formData2.append('file', blob2, 'test_national_id_v2.pdf');
     formData2.append('document_type_id', natIdType.id);

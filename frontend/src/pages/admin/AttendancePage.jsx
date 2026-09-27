@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { downloadCSV as exportHelper } from '../../utils/exportUtil';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { useAuth } from '../../context/AuthContext';
 import {
   Clock,
   Filter,
@@ -14,10 +15,16 @@ import {
   FileDown,
   CalendarCheck,
   Trash2,
-  Lock
+  Lock,
+  CalendarOff,
+  Send,
+  CheckCircle,
+  XCircle,
+  FileText
 } from 'lucide-react';
 
 export const AttendancePage = () => {
+  const { role } = useAuth();
   const [overview, setOverview] = useState(null);
   const [records, setRecords] = useState([]);
   const [tracks, setTracks] = useState([]);
@@ -25,8 +32,9 @@ export const AttendancePage = () => {
   const [interns, setInterns] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('register'); // 'register', 'audit', 'holidays'
+  const [activeTab, setActiveTab] = useState('register'); // 'register', 'permissions', 'audit', 'holidays'
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +43,17 @@ export const AttendancePage = () => {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, pages: 1 });
+
+  // Permissions filter
+  const [permSearch, setPermSearch] = useState('');
+  const [permStatus, setPermStatus] = useState('ALL');
+
+  // Permission Review Modal
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedPerm, setSelectedPerm] = useState(null);
+  const [reviewForm, setReviewForm] = useState({ decision: '', notes: '' });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState('');
 
   // Correction / Manual modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -157,9 +176,33 @@ export const AttendancePage = () => {
     api.get('/interns?limit=100').then(res => setInterns(res.data.data || []));
   }, []);
 
+  const fetchPermissions = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/permissions');
+      if (res.data?.success) {
+        setPermissions(res.data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load permission requests:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOverview();
+    // Fetch dropdown options
+    api.get('/training/tracks').then(res => setTracks(res.data.data || []));
+    api.get('/training/cohorts').then(res => setCohorts(res.data.data || []));
+    api.get('/interns?limit=100').then(res => setInterns(res.data.data || []));
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'register') {
       fetchRegister();
+    } else if (activeTab === 'permissions') {
+      fetchPermissions();
     } else if (activeTab === 'audit') {
       fetchAuditLogs();
     } else if (activeTab === 'holidays') {
@@ -227,19 +270,87 @@ export const AttendancePage = () => {
     }
   };
 
-  const downloadCSV = async () => {
+  const openReviewModal = (perm) => {
+    setSelectedPerm(perm);
+    setReviewError('');
+    const defaultDecision = role === 'mentor' ? 'RECOMMENDED' : 'APPROVED';
+    setReviewForm({
+      decision: defaultDecision,
+      notes: ''
+    });
+    setReviewModalOpen(true);
+  };
+
+  const handleSaveReview = async (e) => {
+    e.preventDefault();
+    setReviewError('');
+
+    if (!reviewForm.decision) {
+      setReviewError('Please select a valid review decision.');
+      return;
+    }
+
+    if (role !== 'mentor' && !reviewForm.notes.trim()) {
+      setReviewError('Audit requirement: An administrative note or reason is required.');
+      return;
+    }
+
     try {
-      await exportHelper('/reports/export/attendance', `jowis-attendance-report-${new Date().toISOString().split('T')[0]}.csv`, {
-        date: selectedDate || undefined,
-        trackId: selectedTrack || undefined,
-        cohortId: selectedCohort || undefined,
-        status: selectedStatus || undefined,
-        search: searchTerm.trim() || undefined
+      setReviewSubmitting(true);
+      const isMentor = role === 'mentor';
+      const endpoint = isMentor
+        ? `/permissions/${selectedPerm.id}/mentor-review`
+        : `/permissions/${selectedPerm.id}/final-review`;
+
+      const res = await api.post(endpoint, {
+        decision: reviewForm.decision,
+        notes: reviewForm.notes.trim() || undefined
       });
+
+      if (res.data?.success) {
+        setReviewModalOpen(false);
+        setSelectedPerm(null);
+        fetchPermissions();
+        fetchOverview();
+        if (activeTab === 'register') fetchRegister();
+      }
     } catch (err) {
-      alert(err.message || 'Failed to download attendance CSV');
+      setReviewError(err.response?.data?.message || 'Failed to submit review.');
+    } finally {
+      setReviewSubmitting(false);
     }
   };
+
+  const downloadCSV = async () => {
+    try {
+      if (activeTab === 'permissions') {
+        await exportHelper('/reports/export/permissions', `jowis-permissions-report-${new Date().toISOString().split('T')[0]}.csv`);
+      } else {
+        await exportHelper('/reports/export/attendance', `jowis-attendance-report-${new Date().toISOString().split('T')[0]}.csv`, {
+          date: selectedDate || undefined,
+          trackId: selectedTrack || undefined,
+          cohortId: selectedCohort || undefined,
+          status: selectedStatus || undefined,
+          search: searchTerm.trim() || undefined
+        });
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to download CSV');
+    }
+  };
+
+  const filteredPermissions = permissions.filter((p) => {
+    if (permStatus !== 'ALL' && p.status !== permStatus) return false;
+    if (permSearch.trim()) {
+      const q = permSearch.toLowerCase();
+      const matchName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase().includes(q);
+      const matchCode = (p.intern_code || '').toLowerCase().includes(q);
+      const matchReq = (p.request_code || '').toLowerCase().includes(q);
+      const matchReason = (p.reason || '').toLowerCase().includes(q);
+      return matchName || matchCode || matchReq || matchReason;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -314,7 +425,7 @@ export const AttendancePage = () => {
       <div className="flex items-center gap-4 border-b border-slate-800">
         <button
           onClick={() => setActiveTab('register')}
-          className={`pb-3 text-sm font-semibold border-b-2 transition-all ${
+          className={`pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
             activeTab === 'register'
               ? 'border-brand-500 text-brand-400'
               : 'border-transparent text-slate-400 hover:text-white'
@@ -323,8 +434,24 @@ export const AttendancePage = () => {
           Daily Register & History
         </button>
         <button
+          onClick={() => setActiveTab('permissions')}
+          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'permissions'
+              ? 'border-brand-500 text-brand-400'
+              : 'border-transparent text-slate-400 hover:text-white'
+          }`}
+        >
+          <CalendarOff className="w-4 h-4" />
+          <span>Permission Requests</span>
+          {permissions.filter(p => p.status === 'PENDING').length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-mono border border-amber-500/30">
+              {permissions.filter(p => p.status === 'PENDING').length}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab('audit')}
-          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-1.5 transition-all ${
+          className={`pb-3 text-sm font-semibold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
             activeTab === 'audit'
               ? 'border-brand-500 text-brand-400'
               : 'border-transparent text-slate-400 hover:text-white'
@@ -450,7 +577,18 @@ export const AttendancePage = () => {
                           <div className="font-semibold text-white">
                             {r.first_name} {r.last_name}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono">{r.intern_code}</div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400 font-mono">{r.intern_code}</span>
+                            {r.schedule_days && (
+                              <span className="flex items-center gap-0.5">
+                                {(typeof r.schedule_days === 'string' ? JSON.parse(r.schedule_days) : r.schedule_days).map(d => (
+                                  <span key={d} className="px-1 py-0.2 rounded text-[9px] font-mono uppercase bg-brand-500/15 text-brand-300 border border-brand-500/25">
+                                    {d.slice(0, 3)}
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-3.5">
                           <div className="text-slate-300">{r.track_name}</div>
@@ -521,6 +659,139 @@ export const AttendancePage = () => {
             )}
           </div>
         </>
+      ) : activeTab === 'permissions' ? (
+        /* Permission Requests Tab */
+        <div className="space-y-4">
+          <div className="erp-card p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                {/* Search */}
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    value={permSearch}
+                    onChange={(e) => setPermSearch(e.target.value)}
+                    placeholder="Search intern name, code, request code..."
+                    className="erp-input w-full pl-9 text-xs"
+                  />
+                </div>
+                {/* Status Filter */}
+                <select
+                  value={permStatus}
+                  onChange={(e) => setPermStatus(e.target.value)}
+                  className="erp-input text-xs w-full sm:w-44"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="APPROVED">APPROVED</option>
+                  <option value="REJECTED">REJECTED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </div>
+              <button
+                onClick={downloadCSV}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors shrink-0 cursor-pointer"
+              >
+                <FileDown className="w-4 h-4 text-amber-400" />
+                <span>Export Permissions CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="erp-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900/90 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="px-5 py-3">Intern</th>
+                    <th className="px-5 py-3">Code / Type</th>
+                    <th className="px-5 py-3">Requested Dates</th>
+                    <th className="px-5 py-3">Scheduled Days</th>
+                    <th className="px-5 py-3">Reason / Details</th>
+                    <th className="px-5 py-3">Mentor Review</th>
+                    <th className="px-5 py-3">Admin Decision</th>
+                    <th className="px-5 py-3">Status</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/80">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-12 text-slate-400">
+                        Loading permission requests...
+                      </td>
+                    </tr>
+                  ) : filteredPermissions.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-12 text-slate-500">
+                        No permission requests found matching criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPermissions.map((p) => (
+                      <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="font-semibold text-white">
+                            {p.first_name} {p.last_name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">{p.intern_code}</div>
+                          {p.track_name && <div className="text-[10px] text-slate-500">{p.track_name}</div>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-mono text-white font-medium">{p.request_code}</div>
+                          <div className="text-[11px] text-slate-400 capitalize">{p.request_type?.replace('_', ' ')}</div>
+                        </td>
+                        <td className="px-5 py-3.5 font-mono text-slate-300 whitespace-nowrap">
+                          {p.start_date} <span className="text-slate-500">to</span> {p.end_date}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="px-2 py-0.5 rounded font-mono font-bold text-[11px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            {p.affected_days_count} {p.affected_days_count === 1 ? 'Work Day' : 'Work Days'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 max-w-xs text-slate-300">
+                          <p className="font-semibold text-white truncate">{p.reason}</p>
+                          {p.message && <p className="text-[11px] text-slate-400 line-clamp-1">{p.message}</p>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge status={p.mentor_review || 'PENDING'} />
+                          {p.mentor_name && <p className="text-[10px] text-slate-400 mt-0.5">By {p.mentor_name}</p>}
+                          {p.mentor_notes && <p className="text-[10px] text-slate-500 italic truncate max-w-[140px]">"{p.mentor_notes}"</p>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge status={p.status} />
+                          {p.reviewer_name && <p className="text-[10px] text-slate-400 mt-0.5">By {p.reviewer_name}</p>}
+                          {p.admin_notes && <p className="text-[10px] text-slate-500 italic truncate max-w-[140px]">"{p.admin_notes}"</p>}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge status={p.status} />
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          {p.status === 'PENDING' ? (
+                            <button
+                              onClick={() => openReviewModal(p)}
+                              className="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[11px] font-semibold shadow transition-colors cursor-pointer"
+                            >
+                              {role === 'mentor' ? 'Mentor Review' : 'Final Review'}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openReviewModal(p)}
+                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium border border-slate-700 transition-colors cursor-pointer"
+                            >
+                              View Details
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       ) : activeTab === 'audit' ? (
         /* Audit Logs Tab */
         <div className="erp-card p-6">
@@ -840,6 +1111,155 @@ export const AttendancePage = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Permission Review Modal */}
+      <Modal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        title={selectedPerm ? `Review Permission Request (${selectedPerm.request_code})` : 'Review Request'}
+      >
+        {selectedPerm && (
+          <form onSubmit={handleSaveReview} className="space-y-4 text-xs">
+            {/* Intern & Request Summary Card */}
+            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-white text-sm">
+                    {selectedPerm.first_name} {selectedPerm.last_name}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono ml-2">
+                    ({selectedPerm.intern_code})
+                  </span>
+                </div>
+                <Badge status={selectedPerm.status} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-slate-300 pt-1 border-t border-slate-800/60 text-[11px]">
+                <div>
+                  <span className="text-slate-500">Period: </span>
+                  <strong className="text-slate-200">{selectedPerm.start_date} to {selectedPerm.end_date}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-500">Working Days Affected: </span>
+                  <strong className="text-emerald-400">{selectedPerm.affected_days_count} Scheduled Days</strong>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-500">Reason: </span>
+                  <strong className="text-slate-200">{selectedPerm.reason}</strong>
+                </div>
+                {selectedPerm.message && (
+                  <div className="col-span-2">
+                    <span className="text-slate-500">Detailed Message: </span>
+                    <span className="text-slate-300">{selectedPerm.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Previous Review Feedback */}
+            {selectedPerm.mentor_review && (
+              <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs space-y-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Mentor Review:</span>
+                <div className="flex items-center gap-2">
+                  <Badge status={selectedPerm.mentor_review} size="sm" />
+                  {selectedPerm.mentor_name && (
+                    <span className="text-slate-300 font-medium">by {selectedPerm.mentor_name}</span>
+                  )}
+                </div>
+                {selectedPerm.mentor_notes && (
+                  <p className="text-slate-400 italic text-[11px]">"{selectedPerm.mentor_notes}"</p>
+                )}
+              </div>
+            )}
+
+            {reviewError && (
+              <div className="p-3 rounded-lg bg-rose-950/70 border border-rose-800 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{reviewError}</span>
+              </div>
+            )}
+
+            {/* Decision Input */}
+            {selectedPerm.status === 'PENDING' ? (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    {role === 'mentor' ? 'Mentor Recommendation' : 'Administrative Determination'} *
+                  </label>
+                  <select
+                    value={reviewForm.decision}
+                    onChange={(e) => setReviewForm({ ...reviewForm, decision: e.target.value })}
+                    className="erp-input w-full text-xs"
+                    required
+                  >
+                    {role === 'mentor' ? (
+                      <>
+                        <option value="RECOMMENDED">RECOMMENDED (Recommend Approval to Management)</option>
+                        <option value="APPROVED">APPROVED (Mentor Approval)</option>
+                        <option value="REJECTED">REJECTED (Mentor Rejection)</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="APPROVED">APPROVED (Excuse Attendance & Update Register)</option>
+                        <option value="REJECTED">REJECTED (Decline Request)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    {role === 'mentor' ? 'Mentor Feedback / Review Notes' : 'Administrative Determination Reason *'}
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder={
+                      role === 'mentor'
+                        ? 'Add remarks or handover confirmation for the administration...'
+                        : 'Official reason recorded in audit logs and communicated to the intern...'
+                    }
+                    value={reviewForm.notes}
+                    onChange={(e) => setReviewForm({ ...reviewForm, notes: e.target.value })}
+                    className="erp-input w-full text-xs resize-none"
+                    required={role !== 'mentor'}
+                  />
+                  {role !== 'mentor' && (
+                    <p className="text-[11px] text-slate-500 mt-1 italic">
+                      * Approval will automatically mark affected scheduled dates as 'EXCUSED' in the attendance register and record this action in attendance audit logs.
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setReviewModalOpen(false)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reviewSubmitting}
+                    className="px-5 py-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-lg shadow-brand-600/30 transition-all cursor-pointer"
+                  >
+                    {reviewSubmitting ? 'Recording Decision...' : 'Submit Decision'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setReviewModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </form>
+        )}
       </Modal>
     </div>
   );

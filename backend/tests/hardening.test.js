@@ -116,10 +116,16 @@ async function runHardeningTests() {
     // 4. Server Time Security & Anti-Spoofing Verification
     // -------------------------------------------------------------
     console.log('\n🔹 TEST GROUP 4: Server Time Security & Anti-Spoofing');
+    let origProfile = null;
     {
       // Clean up today's test record for intern 2 if exists
       const lagosNow = getLagosNow();
       await query('DELETE FROM attendance WHERE intern_id = ? AND attendance_date = ?', [intern2Id, lagosNow.lagosDate]);
+
+      // Save original schedule and temporarily unset to allow testing server-time spoofing irrespective of day of week
+      const [fetchedProfile] = await query('SELECT schedule_days, schedule_locked FROM intern_profiles WHERE id = ?', [intern2Id]);
+      origProfile = fetchedProfile;
+      await query('UPDATE intern_profiles SET schedule_days = NULL WHERE id = ?', [intern2Id]);
 
       // Attempt spoofed check-in with false client parameters
       const spoofedPayload = {
@@ -168,6 +174,16 @@ async function runHardeningTests() {
       const dupData = await dupRes.json();
       assert(dupRes.status === 400, 'Duplicate check-in attempt on same date must return HTTP 400 Bad Request');
       assert(dupData.message && dupData.message.toLowerCase().includes('already'), 'Duplicate response message clarifies attendance already recorded');
+
+      // Restore original schedule
+      const [origProf] = await query('SELECT id FROM intern_profiles WHERE id = ?', [intern2Id]);
+      if (origProf) {
+        await query('UPDATE intern_profiles SET schedule_days = ?, schedule_locked = ? WHERE id = ?', [
+          origProfile?.schedule_days || JSON.stringify(['monday', 'wednesday', 'thursday']),
+          origProfile?.schedule_locked ?? 1,
+          intern2Id
+        ]);
+      }
     }
 
     // -------------------------------------------------------------
