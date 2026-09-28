@@ -830,7 +830,7 @@ export const closeDailyAttendance = async (req, res) => {
 
     // Find all active interns who have NO attendance record for targetDate
     const unmarkedInterns = await query(`
-      SELECT ip.id, u.first_name, u.last_name
+      SELECT ip.id, ip.schedule_days, u.first_name, u.last_name
       FROM intern_profiles ip
       JOIN users u ON ip.user_id = u.id
       WHERE ip.status = 'active'
@@ -848,6 +848,15 @@ export const closeDailyAttendance = async (req, res) => {
 
     let insertedCount = 0;
     for (const intern of unmarkedInterns) {
+      const scheduleDays = parseScheduleDays(intern.schedule_days);
+      // Critical Business Rule: If intern has configured their 3-day schedule, only mark ABSENT if targetDate was expected!
+      if (scheduleDays && scheduleDays.length === 3) {
+        if (!isScheduledDay(targetDate, scheduleDays)) {
+          // targetDate is NOT a scheduled working day for this intern (e.g. Wednesday for Mon/Tue/Thu). Do not mark absent!
+          continue;
+        }
+      }
+
       await query(`
         INSERT INTO attendance (intern_id, attendance_date, check_in_time, status, late_minutes, marked_by, notes)
         VALUES (?, ?, ?, 'ABSENT', 0, ?, 'Automated end-of-day attendance closure')

@@ -10,23 +10,23 @@ import {
   Key
 } from 'lucide-react';
 
-export const CredentialDisplayModal = ({ isOpen, onClose, credentials, title = 'User Account Provisioned Successfully' }) => {
+export const CredentialDisplayModal = ({
+  isOpen,
+  onClose,
+  credentials,
+  credentialData,
+  title = 'User Account Provisioned Successfully'
+}) => {
   const [copied, setCopied] = useState(false);
 
-  if (!isOpen || !credentials) return null;
+  const creds = credentials || credentialData;
+  if (!isOpen || !creds) return null;
 
-  const {
-    firstName = '',
-    lastName = '',
-    email = '',
-    username = '',
-    roleName = '',
-    temporaryPassword = '',
-    internCode = ''
-  } = credentials;
-
-  const fullName = `${firstName} ${lastName}`.trim();
-  const loginIdentifier = email || username;
+  const fullName = (creds.fullName || `${creds.firstName || ''} ${creds.lastName || ''}`).trim() || 'Institutional Staff';
+  const loginIdentifier = creds.identifier || creds.email || creds.username || '';
+  const roleName = creds.roleName || creds.role || 'User';
+  const temporaryPassword = creds.temporaryPassword || creds.password || '';
+  const internCode = creds.internCode || creds.code || '';
 
   const copyText = `Jowis Studio ERP — User Account Credentials
 ---------------------------------------------

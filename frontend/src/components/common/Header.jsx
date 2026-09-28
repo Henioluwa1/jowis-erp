@@ -14,10 +14,16 @@ import {
   FileText,
   ShieldAlert,
   Info,
-  ChevronRight
+  ChevronRight,
+  Menu,
+  BellRing
 } from 'lucide-react';
+import {
+  sendBrowserNotification,
+  requestBrowserNotificationPermission
+} from '../../utils/browserNotifications';
 
-export const Header = () => {
+export const Header = ({ onToggleMobileMenu }) => {
   const { user, logout, role } = useAuth();
   const navigate = useNavigate();
   const [lagosTime, setLagosTime] = useState('');
@@ -28,6 +34,7 @@ export const Header = () => {
   const [recentNotifs, setRecentNotifs] = useState([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const dropdownRef = useRef(null);
+  const prevUnreadRef = useRef(0);
 
   // Lagos Clock
   useEffect(() => {
@@ -48,12 +55,25 @@ export const Header = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch unread count
+  // Fetch unread count & trigger device notification if new alert arrives
   const fetchUnreadCount = async () => {
     try {
       const res = await api.get('/communications/notifications/unread-count');
       if (res.data && typeof res.data.count === 'number') {
-        setUnreadCount(res.data.count);
+        const count = res.data.count;
+        if (prevUnreadRef.current !== null && count > prevUnreadRef.current) {
+          sendBrowserNotification('Jowis Studio Institutional Alert', {
+            body: `You have ${count} unread notifications and important updates waiting.`,
+            tag: `erp-unread-alert-${Date.now()}`,
+            icon: '/favicon.ico',
+            onClick: () => {
+              window.focus();
+              window.location.href = role === 'intern' ? '/intern/notifications' : '/admin/notifications';
+            }
+          });
+        }
+        prevUnreadRef.current = count;
+        setUnreadCount(count);
       }
     } catch (err) {
       // Ignore background fetch errors
@@ -62,7 +82,7 @@ export const Header = () => {
 
   useEffect(() => {
     fetchUnreadCount();
-    const timer = setInterval(fetchUnreadCount, 30000); // 30s background sync
+    const timer = setInterval(fetchUnreadCount, 15000); // 15s background sync
     return () => clearInterval(timer);
   }, []);
 
@@ -75,6 +95,7 @@ export const Header = () => {
         setRecentNotifs(res.data.data);
         if (typeof res.data.unreadCount === 'number') {
           setUnreadCount(res.data.unreadCount);
+          prevUnreadRef.current = res.data.unreadCount;
         }
       }
     } catch (err) {
@@ -130,6 +151,7 @@ export const Header = () => {
     try {
       await api.patch('/communications/notifications/mark-all-read');
       setUnreadCount(0);
+      prevUnreadRef.current = 0;
       setRecentNotifs((prev) => prev.map((n) => ({ ...n, is_read: 1 })));
     } catch (e) {
       console.error('Error marking all as read:', e);
@@ -148,6 +170,8 @@ export const Header = () => {
       case 'document':
       case 'certificate':
         return <FileText className="w-3.5 h-3.5 text-emerald-400" />;
+      case 'chat':
+        return <BellRing className="w-3.5 h-3.5 text-cyan-400" />;
       case 'system':
       default:
         return <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />;
@@ -156,20 +180,41 @@ export const Header = () => {
 
   const notificationCenterLink = role === 'intern' ? '/intern/notifications' : '/admin/notifications';
 
+  // Dynamic portal header styles (UI/UX Pro Max)
+  const headerThemeClass =
+    role === 'super_admin'
+      ? 'bg-[#080c18]/95 border-b border-amber-500/30 shadow-lg shadow-amber-500/5'
+      : role === 'mentor'
+      ? 'bg-[#120e29]/95 border-b border-purple-500/30 shadow-lg shadow-purple-500/5'
+      : role === 'intern'
+      ? 'bg-[#091b26]/95 border-b border-cyan-500/30 shadow-lg shadow-cyan-500/5'
+      : 'bg-slate-900/95 border-b border-blue-500/30 shadow-lg shadow-blue-500/5';
+
   return (
-    <header className="h-16 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 flex items-center justify-between sticky top-0 z-40">
-      {/* Left: Organization Clock */}
+    <header className={`h-16 backdrop-blur-md border-b px-4 sm:px-6 flex items-center justify-between sticky top-0 z-40 transition-colors duration-300 ${headerThemeClass}`}>
+      {/* Left: Mobile Menu Toggle & Organization Clock */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-medium text-slate-300">
+        {/* Mobile Hamburger Menu Toggle */}
+        <button
+          type="button"
+          onClick={onToggleMobileMenu}
+          className="md:hidden p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          title="Toggle Navigation Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-950/80 border border-slate-800 text-xs font-medium text-slate-300">
           <Clock className="w-3.5 h-3.5 text-brand-400 animate-pulse" />
-          <span>Lagos Server Time:</span>
+          <span className="hidden sm:inline">Lagos Time:</span>
           <span className="font-mono font-bold text-brand-300">{lagosTime || 'Loading...'}</span>
-          <span className="text-[10px] text-slate-500 border-l border-slate-700 pl-2">UTC+1</span>
+          <span className="text-[10px] text-slate-500 border-l border-slate-700 pl-2 hidden sm:inline">UTC+1</span>
         </div>
-        <div className="hidden md:flex items-center text-xs text-slate-400">
+        <div className="hidden lg:flex items-center text-xs text-slate-400">
           Cutoff: <span className="text-amber-400 font-semibold ml-1">09:00:00 AM</span>
         </div>
       </div>
+
 
       {/* Right: Notifications & User Profile */}
       <div className="flex items-center gap-3 md:gap-4">
@@ -286,19 +331,48 @@ export const Header = () => {
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
-          <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-brand-300 font-bold text-xs">
-            {user?.firstName?.[0] || 'U'}
+        <Link
+          to={role === 'intern' ? '/intern/profile' : '/admin/profile'}
+          title="View My Profile & ID Card"
+          className="flex items-center gap-3 pl-2 border-l border-slate-800 hover:opacity-90 transition-opacity group"
+        >
+          {user?.avatarUrl || user?.avatar_url ? (
+            <img
+              src={user.avatarUrl || user.avatar_url}
+              alt={user?.firstName || 'User'}
+              className={`w-9 h-9 rounded-full object-cover border-2 shadow-md transition-all ${
+                role === 'super_admin' ? 'border-amber-400 shadow-amber-500/30' :
+                role === 'mentor' ? 'border-purple-400 shadow-purple-500/30' :
+                role === 'intern' ? 'border-cyan-400 shadow-cyan-500/30' :
+                'border-blue-400 shadow-blue-500/30'
+              }`}
+              onError={(e) => {
+                e.target.style.display = 'none';
+                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          <div
+            className={`w-9 h-9 rounded-full bg-slate-800 border items-center justify-center font-bold text-xs shadow-inner ${
+              role === 'super_admin' ? 'border-amber-400/60 text-amber-300' :
+              role === 'mentor' ? 'border-purple-400/60 text-purple-300' :
+              role === 'intern' ? 'border-cyan-400/60 text-cyan-300' :
+              'border-blue-400/60 text-blue-300'
+            } ${
+              user?.avatarUrl || user?.avatar_url ? 'hidden' : 'flex'
+            }`}
+          >
+            {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
           </div>
           <div className="hidden sm:block text-right">
-            <p className="text-xs font-semibold text-white leading-tight">
+            <p className="text-xs font-semibold text-white leading-tight group-hover:text-brand-300 transition-colors">
               {user?.firstName} {user?.lastName}
             </p>
             <p className="text-[10px] text-slate-400 capitalize">
               {user?.internCode || user?.role?.replace('_', ' ')}
             </p>
           </div>
-        </div>
+        </Link>
 
         {/* Logout */}
         <button

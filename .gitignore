@@ -11,3 +11,26 @@ backend/storage/certificates/*
 database/backups/*.sql
 !database/backups/.gitkeep
 
+# Uploads directory protection
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Local AI coding-agent configuration directories (dev-environment artifacts)
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.codewhale/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.warp/
+.windsurf/
+

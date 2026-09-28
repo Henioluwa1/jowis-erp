@@ -141,6 +141,7 @@ export const getInternById = async (req, res) => {
     const [intern] = await query(`
       SELECT ip.*,
              u.id as user_id, u.first_name, u.last_name, u.email, u.avatar_url, u.created_at as account_created,
+             u.is_active as user_active, u.deactivation_reason, u.must_change_password, u.last_login, u.phone as user_phone,
              t.name as track_name, t.code as track_code, t.duration_weeks,
              c.name as cohort_name, c.cohort_code, c.status as cohort_status, c.start_date as cohort_start, c.end_date as cohort_end,
              m.id as mentor_id, mu.first_name as mentor_first, mu.last_name as mentor_last, mu.email as mentor_email, m.specialization as mentor_specialization
@@ -177,6 +178,24 @@ export const getInternById = async (req, res) => {
         SUM(CASE WHEN status = 'EXCUSED' THEN 1 ELSE 0 END) as excused_days
       FROM attendance
       WHERE intern_id = ?
+    `, [requestedId]);
+
+    // Detailed recent attendance records
+    const attendanceRecords = await query(`
+      SELECT id, attendance_date as date, check_in_time, check_out_time, status, late_minutes, notes
+      FROM attendance
+      WHERE intern_id = ?
+      ORDER BY attendance_date DESC
+      LIMIT 40
+    `, [requestedId]);
+
+    // Issued / Revoked Certificates
+    const certificates = await query(`
+      SELECT c.*, ct.name as certificate_type_name
+      FROM certificates c
+      LEFT JOIN certificate_types ct ON c.certificate_type_id = ct.id
+      WHERE c.intern_id = ?
+      ORDER BY c.issue_date DESC, c.id DESC
     `, [requestedId]);
 
     // Assignment history
@@ -223,6 +242,8 @@ export const getInternById = async (req, res) => {
       data: {
         profile: intern,
         attendanceStats: attStats,
+        attendanceRecords,
+        certificates,
         assignmentHistory,
         lifecycleHistory,
         evaluations,
@@ -815,5 +836,241 @@ export const getLifecycleHistory = async (req, res) => {
   } catch (error) {
     console.error('getLifecycleHistory error:', error);
     res.status(500).json({ success: false, message: 'Failed to retrieve lifecycle history.' });
+  }
+};
+
+/**
+ * Reset password for an intern (Admin/Super Admin only)
+ */
+export const resetInternPassword = async (req, res) => {
+  try {
+    const internId = parseInt(req.params.id, 10);
+    const { customPassword, mustChangePassword = true } = req.body;
+
+    const [intern] = await query(`
+      SELECT ip.id, ip.user_id, ip.intern_code, u.email, u.first_name, u.last_name
+      FROM intern_profiles ip
+      JOIN users u ON ip.user_id = u.id
+      WHERE ip.id = ?
+    `, [internId]);
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern not found.' });
+    }
+
+    const newPassword = customPassword && customPassword.trim().length >= 8
+      ? customPassword.trim()
+      : generateSecureTemporaryPassword();
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await query(`
+      UPDATE users
+      SET password_hash = ?, must_change_password = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [passwordHash, mustChangePassword ? 1 : 0, intern.user_id]);
+
+    await recordAuditLog({
+      userId: req.user.id,
+      action: 'INTERN_PASSWORD_RESET',
+      entity: 'intern_profiles',
+      entityId: internId,
+      oldData: null,
+      newData: { internCode: intern.intern_code, mustChangePassword: !!mustChangePassword }
+    });
+
+    res.json({
+      success: true,
+      message: `Password successfully reset for ${intern.first_name} ${intern.last_name}.`,
+      data: {
+        internId,
+        internCode: intern.intern_code,
+        fullName: `${intern.first_name} ${intern.last_name}`,
+        email: intern.email,
+        temporaryPassword: newPassword,
+        mustChangePassword: !!mustChangePassword
+      }
+    });
+  } catch (error) {
+    console.error('resetInternPassword error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reset intern password.' });
+  }
+};
+
+/**
+ * Restrict / Suspend account access for an intern
+ * Preserves all certificates, evaluations, tasks, and attendance records
+ */
+export const restrictInternAccess = async (req, res) => {
+  try {
+    const internId = parseInt(req.params.id, 10);
+    const { reason = 'Administrative access restriction' } = req.body;
+
+    const [intern] = await query(`
+      SELECT ip.id, ip.user_id, ip.status, ip.intern_code, u.first_name, u.last_name, u.is_active
+      FROM intern_profiles ip
+      JOIN users u ON ip.user_id = u.id
+      WHERE ip.id = ?
+    `, [internId]);
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern not found.' });
+    }
+
+    // Deactivate user login while preserving profile, certificates, and historical data
+    await query(`
+      UPDATE users
+      SET is_active = 0, deactivation_reason = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [reason, intern.user_id]);
+
+    // Transition status to suspended if active
+    const oldStatus = intern.status;
+    await query(`
+      UPDATE intern_profiles
+      SET status = 'suspended', updated_at = NOW()
+      WHERE id = ?
+    `, [internId]);
+
+    // Record lifecycle transition
+    await query(`
+      INSERT INTO intern_lifecycle_history (intern_id, previous_status, new_status, reason, changed_by, created_at)
+      VALUES (?, ?, 'suspended', ?, ?, NOW())
+    `, [internId, oldStatus, `Access Restricted: ${reason}`, req.user.id]);
+
+    await recordAuditLog({
+      userId: req.user.id,
+      action: 'INTERN_ACCESS_RESTRICTED',
+      entity: 'intern_profiles',
+      entityId: internId,
+      oldData: { isActive: intern.is_active, status: oldStatus },
+      newData: { isActive: 0, status: 'suspended', reason }
+    });
+
+    res.json({
+      success: true,
+      message: `Account access for ${intern.first_name} ${intern.last_name} has been restricted. All profile details, tasks, attendance, and certificates remain intact and accessible to administrators.`
+    });
+  } catch (error) {
+    console.error('restrictInternAccess error:', error);
+    res.status(500).json({ success: false, message: 'Failed to restrict intern access.' });
+  }
+};
+
+/**
+ * Reopen / Restore account access for a previously restricted intern
+ */
+export const reopenInternAccess = async (req, res) => {
+  try {
+    const internId = parseInt(req.params.id, 10);
+    const { reason = 'Account access reopened by institutional authority' } = req.body;
+
+    const [intern] = await query(`
+      SELECT ip.id, ip.user_id, ip.status, ip.intern_code, u.first_name, u.last_name, u.is_active
+      FROM intern_profiles ip
+      JOIN users u ON ip.user_id = u.id
+      WHERE ip.id = ?
+    `, [internId]);
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern not found.' });
+    }
+
+    // Re-activate user login
+    await query(`
+      UPDATE users
+      SET is_active = 1, deactivation_reason = NULL, updated_at = NOW()
+      WHERE id = ?
+    `, [intern.user_id]);
+
+    // Restore intern lifecycle status to active if was suspended
+    const oldStatus = intern.status;
+    const targetStatus = oldStatus === 'suspended' ? 'active' : oldStatus;
+    await query(`
+      UPDATE intern_profiles
+      SET status = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [targetStatus, internId]);
+
+    // Record lifecycle transition
+    await query(`
+      INSERT INTO intern_lifecycle_history (intern_id, previous_status, new_status, reason, changed_by, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `, [internId, oldStatus, targetStatus, `Access Reopened: ${reason}`, req.user.id]);
+
+    await recordAuditLog({
+      userId: req.user.id,
+      action: 'INTERN_ACCESS_REOPENED',
+      entity: 'intern_profiles',
+      entityId: internId,
+      oldData: { isActive: intern.is_active, status: oldStatus },
+      newData: { isActive: 1, status: targetStatus, reason }
+    });
+
+    res.json({
+      success: true,
+      message: `Account access for ${intern.first_name} ${intern.last_name} has been reopened and restored successfully.`
+    });
+  } catch (error) {
+    console.error('reopenInternAccess error:', error);
+    res.status(500).json({ success: false, message: 'Failed to reopen intern access.' });
+  }
+};
+
+/**
+ * Safe Institutional Archival / Soft-Delete (Preserves all certificates, tasks, attendance records)
+ */
+export const archiveOrDeleteIntern = async (req, res) => {
+  try {
+    const internId = parseInt(req.params.id, 10);
+    const { reason = 'Institutional profile archival / removal' } = req.body || {};
+
+    const [intern] = await query(`
+      SELECT ip.id, ip.user_id, ip.status, u.first_name, u.last_name
+      FROM intern_profiles ip
+      JOIN users u ON ip.user_id = u.id
+      WHERE ip.id = ?
+    `, [internId]);
+
+    if (!intern) {
+      return res.status(404).json({ success: false, message: 'Intern not found.' });
+    }
+
+    // Soft delete: Deactivate user account, update status to 'dropped' (archived)
+    await query(`
+      UPDATE users
+      SET is_active = 0, deactivation_reason = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [`Archived: ${reason}`, intern.user_id]);
+
+    const oldStatus = intern.status;
+    await query(`
+      UPDATE intern_profiles
+      SET status = 'dropped', updated_at = NOW()
+      WHERE id = ?
+    `, [internId]);
+
+    await query(`
+      INSERT INTO intern_lifecycle_history (intern_id, previous_status, new_status, reason, changed_by, created_at)
+      VALUES (?, ?, 'dropped', ?, ?, NOW())
+    `, [internId, oldStatus, `Archived / Soft-Deleted: ${reason}`, req.user.id]);
+
+    await recordAuditLog({
+      userId: req.user.id,
+      action: 'INTERN_ARCHIVED_SOFT_DELETE',
+      entity: 'intern_profiles',
+      entityId: internId,
+      oldData: { status: oldStatus },
+      newData: { status: 'dropped', reason, preserved: true }
+    });
+
+    res.json({
+      success: true,
+      message: `Intern record for ${intern.first_name} ${intern.last_name} has been safely archived. Login access is removed, but all certificates, evaluations, tasks, and attendance history remain permanently preserved and accessible.`
+    });
+  } catch (error) {
+    console.error('archiveOrDeleteIntern error:', error);
+    res.status(500).json({ success: false, message: 'Failed to archive intern record.' });
   }
 };

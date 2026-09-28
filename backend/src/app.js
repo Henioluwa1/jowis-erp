@@ -20,6 +20,9 @@ import certificateRoutes from './routes/certificateRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import automationRoutes from './routes/automationRoutes.js';
 import permissionRoutes from './routes/permissionRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import securityRoutes from './routes/securityRoutes.js';
+import { securityDefenseMiddleware } from './middleware/securityDefense.js';
 
 const app = express();
 
@@ -73,6 +76,9 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
+// Institutional Cyber Defense, IP Firewall & Global Access Logging (Super Admin Debugger)
+app.use(securityDefenseMiddleware);
+
 // Serve uploaded submission files with directory indexing disabled & safe headers (Gate 5 & V-02)
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -81,9 +87,14 @@ const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
   dotfiles: 'ignore',
   index: false,
-  setHeaders: (res) => {
+  setHeaders: (res, filePath) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', 'attachment');
+    const isImage = /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(filePath);
+    if (isImage) {
+      res.setHeader('Content-Disposition', 'inline');
+    } else {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
   }
 }));
 
@@ -124,8 +135,10 @@ app.use('/api/system', systemRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/security', securityRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/permissions', permissionRoutes);
+app.use('/api/chat', chatRoutes);
 
 // 404 Route Handler
 app.use((req, res) => {
@@ -138,6 +151,7 @@ app.use((req, res) => {
 // Centralized Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
+  req._recordError?.(err);
   const status = err.status || (err.name === 'ValidationError' ? 400 : 500);
   const isProd = process.env.NODE_ENV === 'production';
   const message = isProd && status === 500

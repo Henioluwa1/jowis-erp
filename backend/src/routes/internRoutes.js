@@ -7,7 +7,11 @@ import {
   reassignIntern,
   transitionLifecycle,
   getAssignmentHistory,
-  getLifecycleHistory
+  getLifecycleHistory,
+  resetInternPassword,
+  restrictInternAccess,
+  reopenInternAccess,
+  archiveOrDeleteIntern
 } from '../controllers/internController.js';
 import { authenticateJWT, authorizeRoles, verifyInternOwnership } from '../middleware/auth.js';
 
@@ -30,6 +34,14 @@ router.post('/:id/reassign', authenticateJWT, authorizeRoles('super_admin', 'adm
 
 // Lifecycle state transitions (Admin only)
 router.post('/:id/lifecycle', authenticateJWT, authorizeRoles('super_admin', 'admin'), transitionLifecycle);
+
+// Credentials & Account Access Management (Admin/Super Admin only)
+router.post('/:id/reset-password', authenticateJWT, authorizeRoles('super_admin', 'admin'), resetInternPassword);
+router.post('/:id/restrict-access', authenticateJWT, authorizeRoles('super_admin', 'admin'), restrictInternAccess);
+router.post('/:id/reopen-access', authenticateJWT, authorizeRoles('super_admin', 'admin'), reopenInternAccess);
+
+// Safe Institutional Archival / Soft-Delete (Preserves historical certificates, tasks, attendance)
+router.delete('/:id', authenticateJWT, authorizeRoles('super_admin', 'admin'), archiveOrDeleteIntern);
 
 // History audits
 router.get('/:id/assignment-history', authenticateJWT, authorizeRoles('super_admin', 'admin'), getAssignmentHistory);

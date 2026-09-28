@@ -566,8 +566,8 @@ async function seedFullSystemTestData() {
   console.log('\n================================================================');
   console.log('✨ FULL SYSTEM TEST DATA POPULATION COMPLETED SUCCESSFULLY!');
   console.log('================================================================');
-  console.log('✅ Super Admin: admin@jowis.com (Admin@12345)');
-  console.log('✅ Admins: operations@jowis.com, academic.admin@jowis.com (Admin@12345)');
+  console.log('✅ Super Admin: admin@jowis.com');
+  console.log('✅ Admins: operations@jowis.com, academic.admin@jowis.com');
   console.log('✅ Mentors: mentor.sam@jowis.com, mentor.chioma@jowis.com, mentor.frontend@jowis.com');
   console.log('✅ Interns: 12 Profiles across all 9 Lifecycle Statuses');
   console.log('✅ Locked 3-Day Schedules: Monday + 2 Days configured & locked');

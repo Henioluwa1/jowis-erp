@@ -1,5 +1,7 @@
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
+import { getLagosDate, calculateExpectedWorkingDays } from '../utils/timezone.js';
+import { parseScheduleDays, getWorkingDaysConfig } from '../utils/scheduleHelper.js';
 
 /**
  * Helper to convert array of objects to standard RFC-4180 CSV string with UTF-8 BOM
@@ -1980,7 +1982,8 @@ export const exportReportCSV = async (req, res) => {
         }
 
         const [internRow] = await query(`
-          SELECT ip.intern_code, u.first_name, u.last_name, u.email, tr.name as track_name, co.name as cohort_name
+          SELECT ip.id, ip.intern_code, ip.start_date, ip.schedule_days,
+                 u.first_name, u.last_name, u.email, tr.name as track_name, co.name as cohort_name
           FROM intern_profiles ip
           JOIN users u ON ip.user_id = u.id
           JOIN tracks tr ON ip.track_id = tr.id
@@ -1990,9 +1993,10 @@ export const exportReportCSV = async (req, res) => {
 
         const [att] = await query(`
           SELECT COUNT(*) as total_days,
-                 SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_days,
-                 SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_days,
-                 SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent_days
+                 SUM(CASE WHEN UPPER(status) = 'PRESENT' THEN 1 ELSE 0 END) as present_days,
+                 SUM(CASE WHEN UPPER(status) = 'LATE' THEN 1 ELSE 0 END) as late_days,
+                 SUM(CASE WHEN UPPER(status) = 'ABSENT' THEN 1 ELSE 0 END) as absent_days,
+                 SUM(CASE WHEN UPPER(status) = 'EXCUSED' THEN 1 ELSE 0 END) as excused_days
           FROM attendance WHERE intern_id = ?
         `, [internId]);
 
@@ -2012,10 +2016,21 @@ export const exportReportCSV = async (req, res) => {
           ORDER BY pe.finalized_at DESC LIMIT 1
         `, [internId]);
 
+        // Calculate Authoritative Expected Attendance Days using Intern's 3-day schedule
+        const { date: todayDate } = getLagosDate();
+        const scheduleDays = parseScheduleDays(internRow?.schedule_days);
+        const workingDaysConfig = scheduleDays && scheduleDays.length === 3
+          ? getWorkingDaysConfig(scheduleDays)
+          : null;
+        const holidayRows = await query('SELECT holiday_date FROM company_holidays WHERE is_active = 1');
+        const holidaySet = new Set(holidayRows.map(h => h.holiday_date));
+        const { expectedDays } = calculateExpectedWorkingDays(internRow?.start_date || '2026-02-01', todayDate, workingDaysConfig, holidaySet);
+
         const totalAtt = parseInt(att?.total_days || 0, 10);
+        const expectedAttendanceDays = Math.max(expectedDays, totalAtt, 1);
         const presentAtt = parseInt(att?.present_days || 0, 10);
         const lateAtt = parseInt(att?.late_days || 0, 10);
-        const attRate = totalAtt > 0 ? `${Math.round(((presentAtt + lateAtt) / totalAtt) * 100)}%` : '100%';
+        const attRate = `${Math.min(100, Math.round(((presentAtt + lateAtt) / expectedAttendanceDays) * 100))}%`;
 
         records = [
           { domain: 'Profile', metric: 'Intern Name', value: `${internRow?.first_name || ''} ${internRow?.last_name || ''}`.trim(), notes: internRow?.email || '' },
@@ -2083,13 +2098,20 @@ export const getMyPersonalAnalytics = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Intern profile not found.' });
     }
 
-    // 1. Personal Attendance stats
+    // 1. Fetch Intern Profile for start date & schedule
+    const [internProfile] = await query(
+      'SELECT start_date, schedule_days FROM intern_profiles WHERE id = ?',
+      [internProfileId]
+    );
+
+    // 2. Personal Attendance stats
     const [att] = await query(`
       SELECT
         COUNT(*) as total_days,
-        SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as present_days,
-        SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late_days,
-        SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent_days
+        SUM(CASE WHEN UPPER(status) = 'PRESENT' THEN 1 ELSE 0 END) as present_days,
+        SUM(CASE WHEN UPPER(status) = 'LATE' THEN 1 ELSE 0 END) as late_days,
+        SUM(CASE WHEN UPPER(status) = 'ABSENT' THEN 1 ELSE 0 END) as absent_days,
+        SUM(CASE WHEN UPPER(status) = 'EXCUSED' THEN 1 ELSE 0 END) as excused_days
       FROM attendance
       WHERE intern_id = ?
     `, [internProfileId]);
@@ -2097,7 +2119,17 @@ export const getMyPersonalAnalytics = async (req, res) => {
     const totalDays = parseInt(att?.total_days || 0, 10);
     const presentDays = parseInt(att?.present_days || 0, 10);
     const lateDays = parseInt(att?.late_days || 0, 10);
-    const attendanceRate = totalDays > 0 ? Math.round(((presentDays + lateDays) / totalDays) * 100) : 100;
+
+    const { date: todayDate } = getLagosDate();
+    const scheduleDays = parseScheduleDays(internProfile?.schedule_days);
+    const workingDaysConfig = scheduleDays && scheduleDays.length === 3
+      ? getWorkingDaysConfig(scheduleDays)
+      : null;
+    const holidayRows = await query('SELECT holiday_date FROM company_holidays WHERE is_active = 1');
+    const holidaySet = new Set(holidayRows.map(h => h.holiday_date));
+    const { expectedDays } = calculateExpectedWorkingDays(internProfile?.start_date || '2026-02-01', todayDate, workingDaysConfig, holidaySet);
+    const expectedAttendanceDays = Math.max(expectedDays, totalDays, 1);
+    const attendanceRate = Math.min(100, Math.round(((presentDays + lateDays) / expectedAttendanceDays) * 100));
 
     // 2. Personal Task stats
     const [tasks] = await query(`

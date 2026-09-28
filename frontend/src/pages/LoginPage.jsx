@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, AlertCircle, Clock } from 'lucide-react';
 
 export const LoginPage = () => {
+  const [searchParams] = useSearchParams();
+  const inactivityReason = searchParams.get('reason') === 'inactivity';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -30,12 +32,6 @@ export const LoginPage = () => {
     }
   };
 
-  const fillDemo = (demoEmail, demoPass) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setError('');
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 relative overflow-hidden">
       {/* Subtle Background Glows */}
@@ -57,6 +53,13 @@ export const LoginPage = () => {
           <h3 className="text-lg font-semibold text-white mb-2">Portal Authentication</h3>
           <p className="text-xs text-slate-400 mb-6">Sign in to access your administrative or intern portal.</p>
 
+          {inactivityReason && !error && (
+            <div className="mb-5 p-3 rounded-xl bg-amber-950/60 border border-amber-800/80 flex items-center gap-2.5 text-amber-300 text-xs animate-in fade-in">
+              <Clock className="w-4 h-4 flex-shrink-0 text-amber-400" />
+              <span>You were automatically logged out due to 10 minutes of inactivity. Please sign in again.</span>
+            </div>
+          )}
+
           {error && (
             <div className="mb-5 p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 flex items-center gap-2.5 text-rose-300 text-xs">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -64,7 +67,7 @@ export const LoginPage = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
                 Official Email
@@ -74,6 +77,7 @@ export const LoginPage = () => {
                 <input
                   type="email"
                   required
+                  autoComplete="off"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@jowis.com"
@@ -91,6 +95,7 @@ export const LoginPage = () => {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
@@ -114,48 +119,6 @@ export const LoginPage = () => {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Switcher */}
-          <div className="mt-8 pt-6 border-t border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mb-3">
-              <ShieldCheck className="w-3.5 h-3.5 text-brand-400" />
-              <span>One-Click Demo Accounts:</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => fillDemo('admin@jowis.com', 'Admin@12345')}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-brand-500/50 transition-all"
-              >
-                <p className="text-xs font-semibold text-white">Super Admin</p>
-                <p className="text-[10px] text-slate-400 truncate">admin@jowis.com</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillDemo('mentor.sam@jowis.com', 'Mentor@12345')}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-brand-500/50 transition-all"
-              >
-                <p className="text-xs font-semibold text-white">Lead Mentor</p>
-                <p className="text-[10px] text-slate-400 truncate">mentor.sam@jowis.com</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillDemo('intern@jowis.com', 'Intern@12345')}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-brand-500/50 transition-all"
-              >
-                <p className="text-xs font-semibold text-white">Intern (David)</p>
-                <p className="text-[10px] text-slate-400 truncate">intern@jowis.com</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => fillDemo('intern.zainab@jowis.com', 'Intern@12345')}
-                className="text-left p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 hover:border-brand-500/50 transition-all"
-              >
-                <p className="text-xs font-semibold text-white">Intern 2 (Zainab)</p>
-                <p className="text-[10px] text-slate-400 truncate">intern.zainab@...</p>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

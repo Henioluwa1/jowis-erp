@@ -19,6 +19,7 @@ import { CommunicationsPage } from './pages/admin/CommunicationsPage';
 import { SystemSettingsPage } from './pages/admin/SystemSettingsPage';
 import { AdministrationHub } from './pages/admin/governance/AdministrationHub';
 import { AutomationPage } from './pages/admin/automation/AutomationPage';
+import { SecurityAuditLogsPage } from './pages/admin/security/SecurityAuditLogsPage';
 
 // Intern Pages
 import { InternDashboard } from './pages/intern/InternDashboard';
@@ -33,6 +34,7 @@ import { MyProfilePage } from './pages/intern/MyProfilePage';
 
 // Common / Shared Pages
 import { NotificationInboxPage } from './pages/common/NotificationInboxPage';
+import { UniversalProfilePage } from './pages/common/UniversalProfilePage';
 
 // Public Pages
 import { CertificateVerificationPage } from './pages/public/CertificateVerificationPage';
@@ -87,6 +89,8 @@ export default function App() {
         }
       >
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/profile" element={<UniversalProfilePage />} />
+        <Route path="/profile" element={<UniversalProfilePage />} />
         <Route path="/admin/interns" element={<InternsPage />} />
         <Route path="/admin/training" element={<TrainingPage />} />
         <Route path="/admin/attendance" element={<AttendancePage />} />
@@ -115,6 +119,22 @@ export default function App() {
           }
         />
         <Route
+          path="/admin/security"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <SecurityAuditLogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/audit-logs"
+          element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <SecurityAuditLogsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/administration"
           element={<Navigate to="/admin/governance" replace />}
         />
@@ -129,7 +149,7 @@ export default function App() {
         }
       >
         <Route path="/intern/dashboard" element={<InternDashboard />} />
-        <Route path="/intern/profile" element={<MyProfilePage />} />
+        <Route path="/intern/profile" element={<UniversalProfilePage />} />
         <Route path="/intern/attendance" element={<InternAttendancePage />} />
         <Route path="/intern/tasks" element={<InternTasksPage />} />
         <Route path="/intern/performance" element={<InternPerformancePage />} />

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "dev": "node --watch server.js",
     "start:prod": "node server.js",
     "test": "node tests/attendance.test.js",
     "test:phase3": "node tests/phase3.test.js",

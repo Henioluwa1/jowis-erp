@@ -838,6 +838,14 @@ export const downloadCertificatePDF = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied: Not your certificate.' });
     }
 
+    // Revocation enforcement: Revoked certificates cannot be downloaded
+    if (cert.status === 'revoked') {
+      return res.status(403).json({
+        success: false,
+        message: 'This certificate has been revoked by institutional authority and cannot be downloaded.'
+      });
+    }
+
     if (userRole === 'mentor') {
       const mentorId = await getMentorIdForUser(req.user.id);
       if (cert.mentor_id !== mentorId && cert.lead_mentor_id !== mentorId) {

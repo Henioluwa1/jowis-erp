@@ -57,6 +57,90 @@
 }
 
 /* ==========================================================================
+   Portal-Specific Color Themes & Aesthetics (UI/UX Pro Max)
+   ========================================================================== */
+
+/* 1. Super Admin Portal (Sovereign Governance: Obsidian Slate & Imperial Gold mixed with Crisp White) */
+.portal-theme-super_admin {
+  --portal-bg-base: #06080f;
+  --portal-bg-surface: #0c111e;
+  --portal-card-bg: #111728;
+  --portal-border: rgba(255, 255, 255, 0.18);
+  --portal-accent: #f59e0b;
+  --portal-accent-secondary: #3b82f6;
+  --portal-accent-glow: rgba(245, 158, 11, 0.28);
+}
+
+/* 2. Admin Portal (Command & Governance: Midnight Navy & Sapphire mixed with Crisp White) */
+.portal-theme-admin {
+  --portal-bg-base: #070b14;
+  --portal-bg-surface: #0e1626;
+  --portal-card-bg: #121c30;
+  --portal-border: rgba(255, 255, 255, 0.16);
+  --portal-accent: #3b82f6;
+  --portal-accent-secondary: #60a5fa;
+  --portal-accent-glow: rgba(59, 130, 246, 0.28);
+}
+
+/* 3. Mentor Portal (Faculty & Instruction: Imperial Midnight Violet mixed with Crisp White) */
+.portal-theme-mentor {
+  --portal-bg-base: #0a0718;
+  --portal-bg-surface: #140f2e;
+  --portal-card-bg: #1a143c;
+  --portal-border: rgba(255, 255, 255, 0.16);
+  --portal-accent: #8b5cf6;
+  --portal-accent-secondary: #c084fc;
+  --portal-accent-glow: rgba(139, 92, 246, 0.28);
+}
+
+/* 4. Intern Portal (Tech Innovation: Cyber Oceanic Obsidian mixed with Crisp White) */
+.portal-theme-intern {
+  --portal-bg-base: #051017;
+  --portal-bg-surface: #0a1f2b;
+  --portal-card-bg: #0f2838;
+  --portal-border: rgba(255, 255, 255, 0.16);
+  --portal-accent: #06b6d4;
+  --portal-accent-secondary: #22d3ee;
+  --portal-accent-glow: rgba(6, 182, 212, 0.28);
+}
+
+/* Portal Card with White Surface Mix & Glass Luster */
+.portal-card-luminous {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%), var(--portal-card-bg, #111827);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Luminous White-Mixed Surface for High Contrast & Ultimate Visibility */
+.portal-surface-white-mix {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%);
+  color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive Digital ID Card Container (CR80 standard ratio 85.6mm x 53.98mm = 1.586) */
+.id-card-cr80-container {
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 1.586 / 1;
+  position: relative;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+@media (max-width: 640px) {
+  .id-card-cr80-container {
+    aspect-ratio: auto;
+    min-height: 290px;
+  }
+}
+
+
+/* ==========================================================================
    Print & PDF Export Stylesheet (Part 18)
    ========================================================================== */
 @media print {

@@ -13,7 +13,8 @@ import {
   Layers,
   AlertTriangle,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  Ban
 } from 'lucide-react';
 
 export const InternCertificatesPage = () => {
@@ -342,12 +343,22 @@ export const InternCertificatesPage = () => {
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
-                    <button
-                      onClick={() => handleDownloadPDF(cert.id, cert.certificate_number)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 transition-all"
-                    >
-                      <Download className="w-4 h-4" /> Download PDF
-                    </button>
+                    {cert.status === 'revoked' ? (
+                      <button
+                        disabled
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-rose-950/40 text-rose-400/80 border border-rose-800/50 cursor-not-allowed opacity-75 shadow-none"
+                        title="This credential has been revoked and cannot be downloaded."
+                      >
+                        <Ban className="w-3.5 h-3.5 text-rose-400" /> Download Disabled (Revoked)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleDownloadPDF(cert.id, cert.certificate_number)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                      >
+                        <Download className="w-4 h-4" /> Download PDF
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
