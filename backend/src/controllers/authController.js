@@ -520,7 +520,8 @@ export const completeMentorOnboarding = async (req, res) => {
 export const completeInternOnboarding = async (req, res) => {
   try {
     const userId = req.user.id;
-    await query('UPDATE intern_profiles SET onboarding_completed = 1 WHERE user_id = ?', [userId]);
+    await query('UPDATE intern_profiles SET onboarding_completed = 1, schedule_locked = 1 WHERE user_id = ?', [userId]);
+    await query('UPDATE users SET must_change_password = 0 WHERE id = ?', [userId]);
 
     await recordAuditLog(userId, 'INTERN_ONBOARDING', 'intern_profiles', userId, null, null, req, 'Intern completed mandatory onboarding');
 

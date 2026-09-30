@@ -50,8 +50,29 @@ export const InternDashboard = () => {
     setCheckInMessage(null);
     setCheckInError('');
 
+    // Query device GPS coordinates if supported
+    let coords = {};
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 4000,
+            maximumAge: 60000
+          });
+        });
+        coords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude
+        };
+      } catch (geoErr) {
+        // Continue check-in; backend will enforce if geofencing policy is strictly active
+        console.warn('Geolocation read skipped:', geoErr.message);
+      }
+    }
+
     try {
-      const res = await api.post('/attendance/check-in');
+      const res = await api.post('/attendance/check-in', coords);
       if (res.data.success) {
         setCheckInMessage(res.data);
         await fetchInternDashboard();

@@ -52,7 +52,7 @@ router.patch('/assignments/:id/cancel', authenticateJWT, authorizeRoles('super_a
 router.get('/progress', authenticateJWT, getTrainingProgress);
 
 // 6. Dashboards & Workspaces (Gates 10 & 11)
-router.get('/operations-dashboard', authenticateJWT, authorizeRoles('super_admin', 'admin'), getTrainingOperationsDashboard);
+router.get('/operations-dashboard', authenticateJWT, authorizeRoles('super_admin', 'admin', 'mentor'), getTrainingOperationsDashboard);
 router.get('/mentor-workspace', authenticateJWT, authorizeRoles('super_admin', 'admin', 'mentor'), getMentorWorkspace);
 
 // 7. General Task Catalog CRUD (Gate 3)

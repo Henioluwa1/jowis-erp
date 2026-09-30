@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
-import { Settings, Shield, Clock, Sliders, CheckCircle, Calendar, Save, AlertCircle } from 'lucide-react';
+import { Settings, Shield, Clock, Sliders, CheckCircle, Calendar, Save, AlertCircle, Palette } from 'lucide-react';
+import { AdminIDCardStudioContent } from '../../components/common/AdminIDCardStudioModal';
 
 export const SystemSettingsPage = () => {
   const [settings, setSettings] = useState([]);
@@ -139,9 +140,16 @@ export const SystemSettingsPage = () => {
           <Shield className="w-4 h-4" />
           <span>Master Audit Logs</span>
         </button>
+        <button
+          onClick={() => setActiveTab('id_cards')}
+          className={`pb-3 border-b-2 flex items-center gap-2 ${activeTab === 'id_cards' ? 'border-brand-500 text-brand-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+        >
+          <Palette className="w-4 h-4" />
+          <span>Digital ID Card Customizer & Badges</span>
+        </button>
       </div>
 
-      {activeTab === 'settings' ? (
+      {activeTab === 'settings' && (
         <div className="space-y-6">
           {/* Working Days & Schedule Card */}
           <div className="erp-card p-6 space-y-4">
@@ -257,7 +265,9 @@ export const SystemSettingsPage = () => {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'audit' && (
         <div className="erp-card overflow-hidden">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
@@ -292,6 +302,12 @@ export const SystemSettingsPage = () => {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {activeTab === 'id_cards' && (
+        <div className="erp-card p-6 bg-slate-900/90">
+          <AdminIDCardStudioContent isEmbedded={true} />
         </div>
       )}
     </div>

@@ -86,10 +86,20 @@ export const authenticateJWT = async (req, res, next) => {
     };
 
     // Strict Enforcement Barrier: Must change temporary password before accessing operational APIs (Part 9)
+    // Permitted onboarding paths: user profile, password change, logout, and mandatory first-login setup (attendance schedule & onboarding profiles)
     if (req.user.mustChangePassword) {
-      const allowedPaths = ['/auth/me', '/auth/change-password', '/auth/logout'];
+      const allowedPaths = [
+        '/auth/me',
+        '/auth/change-password',
+        '/auth/logout',
+        '/auth/intern-onboarding',
+        '/auth/mentor-onboarding',
+        '/auth/upload-credential',
+        '/attendance/schedule'
+      ];
       const rawPath = (req.baseUrl + req.path).replace(/^\/api/, '');
-      const isPermitted = allowedPaths.some(p => rawPath === p || rawPath.startsWith(p + '/'));
+      const normalizedPath = rawPath.replace(/\/+$/, '') || '/';
+      const isPermitted = allowedPaths.some(p => normalizedPath === p || normalizedPath.startsWith(p + '/'));
       if (!isPermitted) {
         return res.status(403).json({
           success: false,

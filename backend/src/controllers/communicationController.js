@@ -1,6 +1,7 @@
 import { query } from '../config/db.js';
 import { recordAuditLog } from '../middleware/audit.js';
 import { notifyAnnouncementPublished, createNotification } from '../services/notificationService.js';
+import { sseManager } from '../services/sseManager.js';
 
 /**
  * Promote scheduled announcements and expire outdated announcements server-side (Gate 2)
@@ -1250,4 +1251,20 @@ export const updateNotificationPreferences = async (req, res) => {
     console.error('updateNotificationPreferences error:', error);
     res.status(500).json({ success: false, message: 'Failed to update notification preferences.' });
   }
+};
+
+/**
+ * Real-time Server-Sent Events (SSE) Stream
+ */
+export const sseStreamHandler = (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders?.();
+
+  const connectionId = `${req.user.id}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  sseManager.addClient(connectionId, res, req.user);
 };

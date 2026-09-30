@@ -19,7 +19,8 @@ import {
   markAllNotificationsAsRead,
   deleteNotification,
   getNotificationPreferences,
-  updateNotificationPreferences
+  updateNotificationPreferences,
+  sseStreamHandler
 } from '../controllers/communicationController.js';
 import { authenticateJWT, authorizeRoles } from '../middleware/auth.js';
 
@@ -53,6 +54,11 @@ router.get('/notifications', authenticateJWT, getNotifications);
 router.patch('/notifications/:id/read', authenticateJWT, markNotificationAsRead);
 router.patch('/notifications/:id/unread', authenticateJWT, markNotificationAsUnread);
 router.delete('/notifications/:id', authenticateJWT, deleteNotification);
+
+// -------------------------------------------------------------
+// Real-Time Event Stream (SSE)
+// -------------------------------------------------------------
+router.get('/stream', authenticateJWT, sseStreamHandler);
 
 // -------------------------------------------------------------
 // Notification Preferences Routes (Gate 8)

@@ -12,6 +12,21 @@ import {
 import { createNotification } from '../services/notificationService.js';
 
 /**
+ * Computes geographic distance in meters between two lat/lng coordinates (Haversine formula)
+ */
+function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // Earth's radius in meters
+  const toRad = deg => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
  * Intern self check-in endpoint
  * CRITICAL SECURITY: Evaluates current authoritative Lagos server time against 09:00 AM cutoff.
  * Any client-supplied check_in_time, status, late_minutes, or attendance_date is strictly disregarded.
@@ -28,6 +43,39 @@ export const checkIn = async (req, res) => {
 
     // Authoritative server timestamp in Africa/Lagos timezone
     const { date, time } = getLagosDate();
+
+    // Optional Physical Geofencing Verification (Configurable by Institutional Administrator)
+    const { latitude, longitude } = req.body || {};
+    const geofenceSettings = await query(
+      `SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('attendance_geofence_enabled', 'attendance_office_lat', 'attendance_office_lng', 'attendance_geofence_radius_meters')`
+    );
+    const settingsMap = Object.fromEntries((geofenceSettings || []).map(s => [s.setting_key, s.setting_value]));
+    const geofenceEnabled = settingsMap['attendance_geofence_enabled'] === '1';
+
+    let locationNotes = '';
+    if (geofenceEnabled) {
+      if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
+        return res.status(403).json({
+          success: false,
+          message: 'Location verification required: Studio geofence enforcement is active. Please enable device location / GPS permissions to mark attendance.'
+        });
+      }
+
+      const officeLat = parseFloat(settingsMap['attendance_office_lat'] || '6.5244');
+      const officeLng = parseFloat(settingsMap['attendance_office_lng'] || '3.3792');
+      const maxRadius = parseFloat(settingsMap['attendance_geofence_radius_meters'] || '500');
+
+      const distance = calculateDistanceMeters(parseFloat(latitude), parseFloat(longitude), officeLat, officeLng);
+      if (distance > maxRadius) {
+        return res.status(403).json({
+          success: false,
+          message: `Location verification failed: You are approximately ${Math.round(distance)} meters from the studio premises (allowed radius is ${maxRadius}m). Attendance must be recorded on-site.`
+        });
+      }
+      locationNotes = ` [GPS Verified: ${Math.round(distance)}m from premises]`;
+    } else if (latitude !== undefined && longitude !== undefined && latitude !== null && longitude !== null) {
+      locationNotes = ` [GPS Reported: ${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}]`;
+    }
 
     // Check intern schedule if configured
     const [internProf] = await query('SELECT schedule_days, schedule_locked FROM intern_profiles WHERE id = ?', [internProfileId]);
@@ -83,7 +131,7 @@ export const checkIn = async (req, res) => {
         time,
         evaluation.status,
         evaluation.lateMinutes,
-        evaluation.status === 'LATE' ? `Late arrival: ${evaluation.lateMinutes} min after ${cutoffTime}` : 'Prompt arrival'
+        (evaluation.status === 'LATE' ? `Late arrival: ${evaluation.lateMinutes} min after ${cutoffTime}` : 'Prompt arrival') + locationNotes
       ]
     );
 
@@ -243,7 +291,7 @@ export const setMySchedule = async (req, res) => {
       });
     }
 
-    const { days } = req.body;
+    const days = req.body.days || req.body.scheduleDays;
     const canonicalDays = validateSchedule(days);
 
     await query(

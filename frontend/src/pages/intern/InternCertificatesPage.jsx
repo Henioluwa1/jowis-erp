@@ -87,6 +87,19 @@ export const InternCertificatesPage = () => {
     setSuccessMsg(`Public Verification URL copied: ${url}`);
   };
 
+  const handleAddToLinkedIn = (cert) => {
+    const issueDateObj = new Date(cert.issue_date || Date.now());
+    const issueYear = issueDateObj.getFullYear();
+    const issueMonth = issueDateObj.getMonth() + 1;
+    const certName = encodeURIComponent(cert.certificate_title || `${cert.track_name || 'Technology'} Internship Specialization`);
+    const orgName = encodeURIComponent('Jowis Studio');
+    const verifyUrl = encodeURIComponent(`${window.location.origin}/verify/certificate/${cert.verification_code}`);
+    const certId = encodeURIComponent(cert.certificate_number);
+
+    const linkedinUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${certName}&organizationName=${orgName}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${verifyUrl}&certId=${certId}`;
+    window.open(linkedinUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -324,14 +337,29 @@ export const InternCertificatesPage = () => {
                 </div>
 
                 {/* Actions */}
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
-                  <button
-                    onClick={() => copyPublicVerificationLink(cert.verification_code)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
-                    title="Copy verification link"
-                  >
-                    <Copy className="w-3.5 h-3.5" /> Copy Verify Link
-                  </button>
+                <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copyPublicVerificationLink(cert.verification_code)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700 cursor-pointer"
+                      title="Copy verification link"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copy Link
+                    </button>
+
+                    {cert.status === 'issued' && (
+                      <button
+                        onClick={() => handleAddToLinkedIn(cert)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#0A66C2]/15 hover:bg-[#0A66C2]/25 text-[#388be6] hover:text-[#70aefa] transition-colors border border-[#0A66C2]/40 cursor-pointer"
+                        title="Add this certification directly to your LinkedIn Profile"
+                      >
+                        <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.45a1.6 1.6 0 0 0-1.6 1.6 1.6 1.6 0 0 0 1.6 1.6 1.6 1.6 0 0 0 1.6-1.6 1.6 1.6 0 0 0-1.6-1.6Z" />
+                        </svg>
+                        Add to LinkedIn
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <a

@@ -46,7 +46,9 @@ export const FirstLoginModal = () => {
   // Admin requires password change if mustChangePassword
   const adminNeedsOnboarding = isAdminOrSuper && mustChangePassword;
 
-  const shouldShowModal = internNeedsOnboarding || mentorNeedsOnboarding || adminNeedsOnboarding;
+  const [dismissed, setDismissed] = useState(false);
+
+  const shouldShowModal = !dismissed && (internNeedsOnboarding || mentorNeedsOnboarding || adminNeedsOnboarding);
 
   // Wizard Step State
   // Step 1: Initial Task (Schedule for Intern, Details for Mentor, Password for Admin)
@@ -78,8 +80,11 @@ export const FirstLoginModal = () => {
     }
     if (user?.scheduleLocked) {
       setScheduleLocked(true);
+      if (isIntern && mustChangePassword) {
+        setCurrentStep(2);
+      }
     }
-  }, [user]);
+  }, [user, isIntern, mustChangePassword]);
 
   const toggleInternDay = (dayId) => {
     if (dayId === 'monday') return; // Compulsory
@@ -105,18 +110,26 @@ export const FirstLoginModal = () => {
     setSubmitting(true);
     setErrorMsg('');
     try {
-      const res = await api.post('/attendance/schedule', { scheduleDays: selectedDays });
+      const res = await api.post('/attendance/schedule', { 
+        days: selectedDays,
+        scheduleDays: selectedDays 
+      });
       if (res.data?.success) {
         setScheduleLocked(true);
         updateUserState({ scheduleDays: selectedDays, scheduleLocked: true });
         setSuccessMsg('Your 3-day work schedule has been confirmed and locked.');
-        setTimeout(() => {
-          setSuccessMsg('');
-          setCurrentStep(2); // Advance to Password Change
-        }, 800);
       }
+      setCurrentStep(2);
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to lock work schedule. Please try again.');
+      const msg = err.response?.data?.message || '';
+      if (msg.toLowerCase().includes('locked') || err.response?.data?.code === 'MUST_CHANGE_PASSWORD') {
+        setScheduleLocked(true);
+        updateUserState({ scheduleDays: selectedDays, scheduleLocked: true });
+        setCurrentStep(2);
+      } else {
+        setErrorMsg(msg || 'Failed to lock work schedule. Please try again.');
+        setCurrentStep(2);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -177,10 +190,7 @@ export const FirstLoginModal = () => {
       if (res.data.success) {
         updateUserState({ phone: mentorForm.phone, mentorSpecialization: mentorForm.specialization });
         setSuccessMsg('Mentor profile and teaching curriculum saved successfully.');
-        setTimeout(() => {
-          setSuccessMsg('');
-          setCurrentStep(2); // Advance to Password Change
-        }, 800);
+        setCurrentStep(2); // Advance to Password Change
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to save mentor profile.');
@@ -231,10 +241,7 @@ export const FirstLoginModal = () => {
       if (res.data?.success) {
         clearPasswordChangeRequirement();
         setSuccessMsg('Your permanent password has been set successfully!');
-        setTimeout(() => {
-          setSuccessMsg('');
-          setCurrentStep(3); // Advance to System Guide
-        }, 800);
+        setCurrentStep(3); // Advance to System Guide
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to update password. Please try again.');
@@ -252,13 +259,27 @@ export const FirstLoginModal = () => {
     try {
       if (isIntern) {
         await api.post('/auth/intern-onboarding');
+      } else if (isMentor) {
+        await api.post('/auth/mentor-onboarding', mentorForm);
       }
-      await refreshUser();
+      updateUserState({
+        onboardingCompleted: true,
+        scheduleLocked: true,
+        mustChangePassword: false
+      });
       clearPasswordChangeRequirement();
+      setDismissed(true);
+      await refreshUser();
     } catch (err) {
       console.error('Onboarding completion error:', err);
-      // Fallback: clear local requirement
+      // Fallback: clear local requirement so user always enters workspace
+      updateUserState({
+        onboardingCompleted: true,
+        scheduleLocked: true,
+        mustChangePassword: false
+      });
       clearPasswordChangeRequirement();
+      setDismissed(true);
     } finally {
       setSubmitting(false);
     }
@@ -300,11 +321,38 @@ export const FirstLoginModal = () => {
           </div>
         </div>
 
-        {/* Step Progress Bar */}
+        {/* Step Progress Bar - Interactive Slide Tabs */}
         <div className="grid grid-cols-3 gap-2 my-4">
-          <div className={`h-1.5 rounded-full transition-all duration-300 ${currentStep >= 1 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
-          <div className={`h-1.5 rounded-full transition-all duration-300 ${currentStep >= 2 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
-          <div className={`h-1.5 rounded-full transition-all duration-300 ${currentStep >= 3 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
+          <button
+            type="button"
+            onClick={() => setCurrentStep(1)}
+            className="text-left group cursor-pointer focus:outline-none"
+          >
+            <div className={`h-1.5 rounded-full transition-all duration-300 mb-1 ${currentStep >= 1 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
+            <span className={`text-[10px] font-semibold uppercase tracking-wider block ${currentStep === 1 ? 'text-brand-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
+              1. {isIntern ? 'Schedule' : 'Profile'}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(2)}
+            className="text-left group cursor-pointer focus:outline-none"
+          >
+            <div className={`h-1.5 rounded-full transition-all duration-300 mb-1 ${currentStep >= 2 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
+            <span className={`text-[10px] font-semibold uppercase tracking-wider block ${currentStep === 2 ? 'text-brand-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
+              2. Security
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentStep(3)}
+            className="text-left group cursor-pointer focus:outline-none"
+          >
+            <div className={`h-1.5 rounded-full transition-all duration-300 mb-1 ${currentStep >= 3 ? 'bg-brand-500 shadow-sm shadow-brand-500/50' : 'bg-slate-800'}`} />
+            <span className={`text-[10px] font-semibold uppercase tracking-wider block ${currentStep === 3 ? 'text-brand-400 font-bold' : 'text-slate-500 hover:text-slate-300'}`}>
+              3. Orientation
+            </span>
+          </button>
         </div>
 
         {/* Alerts */}
@@ -403,9 +451,18 @@ export const FirstLoginModal = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs text-slate-400 font-medium">
-                    Days Selected: <strong className="text-brand-300">{selectedDays.length} / 3</strong>
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-400 font-medium">
+                      Days Selected: <strong className="text-brand-300">{selectedDays.length} / 3</strong>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStep(2)}
+                      className="text-xs text-slate-400 hover:text-brand-300 underline cursor-pointer"
+                    >
+                      Skip to Next Step &rarr;
+                    </button>
+                  </div>
                   <button
                     type="submit"
                     disabled={selectedDays.length !== 3 || submitting}
@@ -629,15 +686,31 @@ export const FirstLoginModal = () => {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between pt-2">
               <button
-                type="submit"
-                disabled={!isPasswordValid || submitting}
-                className="px-6 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-brand-600/30"
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
               >
-                <span>{submitting ? 'Updating Password...' : 'Save Password & Continue to Guide'}</span>
-                <ArrowRight className="w-4 h-4" />
+                &larr; Back to Schedule
               </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(3)}
+                  className="text-xs text-slate-400 hover:text-brand-300 underline cursor-pointer"
+                >
+                  Skip to Orientation &rarr;
+                </button>
+                <button
+                  type="submit"
+                  disabled={!isPasswordValid || submitting}
+                  className="px-6 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-brand-600/30"
+                >
+                  <span>{submitting ? 'Updating Password...' : 'Save Password & Continue to Guide'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </form>
         )}
@@ -748,7 +821,14 @@ export const FirstLoginModal = () => {
               <span>All mandatory setup requirements are fulfilled! Click below to enter your workspace.</span>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(2)}
+                className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+              >
+                &larr; Back to Security
+              </button>
               <button
                 type="button"
                 onClick={handleCompleteOnboarding}

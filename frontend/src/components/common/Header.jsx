@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { sseService } from '../../services/sseService';
 import {
   Clock,
   LogOut,
@@ -82,8 +83,29 @@ export const Header = ({ onToggleMobileMenu }) => {
 
   useEffect(() => {
     fetchUnreadCount();
-    const timer = setInterval(fetchUnreadCount, 15000); // 15s background sync
-    return () => clearInterval(timer);
+    sseService.connect();
+
+    const unsubNotif = sseService.on('notification', (notif) => {
+      setUnreadCount(prev => prev + 1);
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(notif.title || 'Jowis ERP Notification', {
+          body: notif.message,
+          icon: '/favicon.ico'
+        });
+      }
+    });
+
+    const unsubAnnounce = sseService.on('announcement', () => {
+      setUnreadCount(prev => prev + 1);
+    });
+
+    // Gentle fallback background sync (60s instead of rapid 15s polling)
+    const timer = setInterval(fetchUnreadCount, 60000);
+    return () => {
+      unsubNotif();
+      unsubAnnounce();
+      clearInterval(timer);
+    };
   }, []);
 
   // Fetch recent notifications when dropdown opens

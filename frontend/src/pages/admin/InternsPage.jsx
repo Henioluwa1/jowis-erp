@@ -38,8 +38,13 @@ import {
   Trash2,
   Archive,
   Download,
-  Ban
+  Ban,
+  CreditCard,
+  Printer,
+  Palette
 } from 'lucide-react';
+import { InstitutionalIDCard, DEFAULT_ID_CARD_CONFIGS } from '../../components/common/InstitutionalIDCard';
+import { AdminIDCardStudioModal } from '../../components/common/AdminIDCardStudioModal';
 
 const LIFECYCLE_STATUSES = [
   'applied',
@@ -106,7 +111,13 @@ export const InternsPage = () => {
   // Profile detail modal
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [selectedInternDetail, setSelectedInternDetail] = useState(null);
-  const [detailTab, setDetailTab] = useState('records'); // 'records', 'security'
+  const [detailTab, setDetailTab] = useState('records'); // 'records', 'security', 'id_card'
+
+  // ID Card modal & studio states
+  const [selectedInternForIdCard, setSelectedInternForIdCard] = useState(null);
+  const [idCardModalOpen, setIdCardModalOpen] = useState(false);
+  const [studioModalOpen, setStudioModalOpen] = useState(false);
+  const [idCardConfigs, setIdCardConfigs] = useState(DEFAULT_ID_CARD_CONFIGS);
 
   // Access & Security Management states
   const [resetPasswordCustom, setResetPasswordCustom] = useState('');
@@ -151,6 +162,16 @@ export const InternsPage = () => {
     api.get('/training/tracks').then(res => setTracks(res.data.data || []));
     api.get('/training/cohorts').then(res => setCohorts(res.data.data || []));
     api.get('/training/mentors').then(res => setMentors(res.data.data || []));
+    api.get('/system/id-card-config').then(res => {
+      if (res.data?.success && res.data?.data) {
+        setIdCardConfigs(prev => ({
+          intern: { ...prev.intern, ...(res.data.data.intern || {}) },
+          mentor: { ...prev.mentor, ...(res.data.data.mentor || {}) },
+          admin: { ...prev.admin, ...(res.data.data.admin || {}) },
+          super_admin: { ...prev.super_admin, ...(res.data.data.super_admin || {}) }
+        }));
+      }
+    }).catch(e => console.error(e));
   }, [trackFilter, cohortFilter, mentorFilter, statusFilter]);
 
   const handleSearch = (e) => {
@@ -486,6 +507,15 @@ export const InternsPage = () => {
             <span>Export CSV</span>
           </button>
           <button
+            type="button"
+            onClick={() => setStudioModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 text-xs font-semibold rounded-lg border border-amber-500/30 transition-colors cursor-pointer"
+            title="Open ID Card Studio to edit designs universally or print badges"
+          >
+            <Palette className="w-4 h-4" />
+            <span>ID Card Studio</span>
+          </button>
+          <button
             onClick={openAddModal}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg shadow-lg shadow-brand-600/30 transition-all cursor-pointer"
           >
@@ -620,6 +650,18 @@ export const InternsPage = () => {
                         title="Transition Lifecycle State"
                       >
                         Status
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedInternForIdCard(it);
+                          setIdCardModalOpen(true);
+                        }}
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 text-[11px] font-semibold border border-cyan-800/60 transition-colors cursor-pointer inline-flex items-center gap-1"
+                        title="View & Print Official Institutional ID Card (Front & Back with QR code)"
+                      >
+                        <CreditCard className="w-3 h-3" />
+                        <span>ID Card</span>
                       </button>
                       <button
                         onClick={() => viewInternProfile(it.id)}
@@ -1159,6 +1201,18 @@ export const InternsPage = () => {
                     {isRestricted && (
                       <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse ml-0.5"></span>
                     )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab('id_card')}
+                    className={`px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                      detailTab === 'id_card'
+                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                        : 'bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Official ID Badge & Print</span>
                   </button>
                 </div>
 
@@ -1811,11 +1865,109 @@ export const InternsPage = () => {
                     </div>
                   </div>
                 )}
+
+                {/* TAB 3: OFFICIAL ID CARD & BADGE PRINT */}
+                {detailTab === 'id_card' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-800">
+                      <div>
+                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-cyan-400" />
+                          <span>Official Institutional Digital ID Badge</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          CR80 wallet standard with vector QR code linked to public verification registry.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          document.body.classList.add('printing-id-card');
+                          window.print();
+                          setTimeout(() => document.body.classList.remove('printing-id-card'), 1000);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-brand-600/30"
+                      >
+                        <Printer className="w-4 h-4" />
+                        <span>Print Badge</span>
+                      </button>
+                    </div>
+
+                    <InstitutionalIDCard
+                      user={{
+                        ...p,
+                        first_name: p.first_name,
+                        last_name: p.last_name,
+                        role: 'intern',
+                        role_name: 'intern',
+                        intern_code: p.intern_code,
+                        track_name: p.track_name,
+                        cohort_name: p.cohort_name,
+                        start_date: p.start_date,
+                        expected_end_date: p.expected_end_date,
+                        avatar_url: p.avatar_url
+                      }}
+                      customConfig={idCardConfigs.intern}
+                      cardRole="intern"
+                      side="stacked"
+                      showControls={true}
+                    />
+                  </div>
+                )}
               </div>
             );
           })()}
         </Modal>
       )}
+
+      {/* STANDALONE INTERN ID CARD & BADGE PRINT MODAL */}
+      {selectedInternForIdCard && (
+        <Modal
+          isOpen={idCardModalOpen}
+          onClose={() => setIdCardModalOpen(false)}
+          title={`Official Digital ID Badge: ${selectedInternForIdCard.first_name} ${selectedInternForIdCard.last_name} (${selectedInternForIdCard.intern_code})`}
+          maxWidth="max-w-4xl"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3.5 bg-slate-900 rounded-2xl border border-slate-800 text-xs">
+              <div>
+                <span className="font-bold text-white text-sm">Institutional Wallet Badge • CR80 Physical Standard</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">Scannable vector QR code for security verification.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.body.classList.add('printing-id-card');
+                    window.print();
+                    setTimeout(() => document.body.classList.remove('printing-id-card'), 1000);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-brand-600/30"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Official Badge</span>
+                </button>
+              </div>
+            </div>
+
+            <InstitutionalIDCard
+              user={selectedInternForIdCard}
+              customConfig={idCardConfigs.intern}
+              cardRole="intern"
+              side="stacked"
+              showControls={true}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {/* ADMIN ID CARD STUDIO MODAL */}
+      <AdminIDCardStudioModal
+        isOpen={studioModalOpen}
+        onClose={() => setStudioModalOpen(false)}
+        initialRole="intern"
+        onConfigSaved={(newCfg) => setIdCardConfigs(newCfg)}
+      />
       {/* Credential Display Modal (Part 5) */}
       <CredentialDisplayModal
         isOpen={Boolean(credentialData)}

@@ -441,7 +441,7 @@ test('Comprehensive ERP Independent Audit, QA & Business Rule Verification', asy
     const certsData = await certsRes.json();
     assert(certsData.success && certsData.data.length > 0, 'Certificates exist in system');
 
-    const firstCert = certsData.data[0];
+    const firstCert = certsData.data.find(c => c.status === 'issued') || certsData.data[0];
 
     // Download PDF
     const downloadRes = await fetch(`${baseUrl}/certificates/${firstCert.id}/download`, {

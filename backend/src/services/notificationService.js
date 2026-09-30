@@ -1,4 +1,5 @@
 import { query } from '../config/db.js';
+import { sseManager } from './sseManager.js';
 
 /**
  * Supported Notification Delivery Channels (Gate 12)
@@ -86,6 +87,20 @@ async function saveInAppNotification({ userId, type, title, message, relatedEnti
       link || null
     ]
   );
+
+  try {
+    sseManager.sendToUser(userId, 'notification', {
+      id: result.insertId,
+      userId,
+      type: cleanType,
+      title: cleanTitle,
+      message: cleanMsg,
+      link: link || null,
+      createdAt: new Date().toISOString()
+    });
+  } catch (sseErr) {
+    // Non-blocking real-time delivery
+  }
 
   return result.insertId;
 }

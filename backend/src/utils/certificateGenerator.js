@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import QRCode from 'qrcode';
 import { certificateStorageDir } from './documentUpload.js';
 
 /**
@@ -32,6 +33,34 @@ export async function generateCertificatePDF({
 }) {
   const safeNum = certificateNumber.replace(/[^a-zA-Z0-9_-]/g, '_');
   const targetPath = outputPath || path.join(certificateStorageDir, `cert_${safeNum}.pdf`);
+
+  // Generate vector QR code modules for verification URL
+  const baseUrl = process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const verifyUrl = `${baseUrl}/verify/certificate/${encodeURIComponent(verificationCode)}`;
+  
+  let qrCodeCommands = [];
+  try {
+    const qr = QRCode.create(verifyUrl, { errorCorrectionLevel: 'M' });
+    const qrSize = qr.modules.size;
+    const boxX = 72;
+    const boxY = 62;
+    const boxDim = 60;
+    const modSize = boxDim / qrSize;
+
+    qrCodeCommands.push(`0 0 0 rg`); // Black color for QR modules
+    for (let r = 0; r < qrSize; r++) {
+      for (let c = 0; c < qrSize; c++) {
+        if (qr.modules.get(r, c)) {
+          const mx = (boxX + c * modSize).toFixed(2);
+          const my = (boxY + (qrSize - 1 - r) * modSize).toFixed(2);
+          const ms = modSize.toFixed(2);
+          qrCodeCommands.push(`${mx} ${my} ${ms} ${ms} re f`);
+        }
+      }
+    }
+  } catch (qrErr) {
+    console.error('Vector QR generation warning:', qrErr.message);
+  }
 
   // Landscape dimensions in points: 792 x 612 (Letter Landscape)
   const width = 792;
@@ -135,39 +164,57 @@ export async function generateCertificatePDF({
     `ET`,
 
     // Bottom Signatory Section
-    // Signature line left: Verification & Authority
+    // Signature line left: Verification & Authority with Vector QR Code
     `0.60 0.65 0.75 RG`,
     `1 w`,
-    `80 120 m 280 120 l S`,
+    `70 135 m 320 135 l S`,
+
+    // Vector QR Code background container
+    `1 1 1 rg`,
+    `0.80 0.85 0.90 RG`,
+    `0.75 w`,
+    `70 60 64 64 re B`,
+
+    // Vector QR Code Modules
+    ...qrCodeCommands,
 
     `BT`,
-    `/F1 10 Tf`,
+    `/F1 7 Tf`,
+    `0.35 0.40 0.50 rg`,
+    `1 0 0 1 76 50 Tm`,
+    `(SCAN TO VERIFY) Tj`,
+    `ET`,
+
+    `BT`,
+    `/F1 9 Tf`,
     `0.15 0.20 0.30 rg`,
-    `1 0 0 1 80 102 Tm`,
-    `(CERTIFICATE VERIFICATION) Tj`,
+    `1 0 0 1 144 118 Tm`,
+    `(OFFICIAL CREDENTIAL) Tj`,
     `/F2 8 Tf`,
     `0.40 0.45 0.55 rg`,
-    `1 0 0 1 80 88 Tm`,
+    `1 0 0 1 144 104 Tm`,
     `(Cert No: ${escapePdfText(certificateNumber)}) Tj`,
-    `1 0 0 1 80 74 Tm`,
-    `(Code: ${escapePdfText(verificationCode.substring(0, 32))}...) Tj`,
+    `1 0 0 1 144 92 Tm`,
+    `(Code: ${escapePdfText(verificationCode.substring(0, 24))}...) Tj`,
+    `1 0 0 1 144 80 Tm`,
+    `(Status: Verified & Cryptographically Signed) Tj`,
     `ET`,
 
     // Signature line right: Executive Director Signatory
     `0.60 0.65 0.75 RG`,
     `1 w`,
-    `512 120 m 712 120 l S`,
+    `512 135 m 712 135 l S`,
 
     `BT`,
     `/F1 11 Tf`,
     `0.10 0.15 0.25 rg`,
-    `1 0 0 1 512 102 Tm`,
+    `1 0 0 1 512 115 Tm`,
     `(${escapePdfText(signatoryName)}) Tj`,
     `/F2 9 Tf`,
     `0.40 0.45 0.55 rg`,
-    `1 0 0 1 512 86 Tm`,
+    `1 0 0 1 512 99 Tm`,
     `(${escapePdfText(signatoryTitle)}) Tj`,
-    `1 0 0 1 512 72 Tm`,
+    `1 0 0 1 512 83 Tm`,
     `(Authorized Institutional Signature) Tj`,
     `ET`,
 
